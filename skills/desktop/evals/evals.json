@@ -1,0 +1,23 @@
+{
+  "skill_name": "desktop",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在后台子桌面里打开记事本，输入 isolated desktop test，确认输入成功后结束，不要碰我现在的桌面。",
+      "expected_output": "通过 desktop_start 验证就绪，经 desktop_tools 获取 schema，仅经 desktop_call 操作及验证客户机记事本，最后 desktop_stop；没有本机 GUI 调用。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "检查 cua-rdp 子桌面的当前状态，不要创建或连接桌面。",
+      "expected_output": "只调用 desktop_status，准确报告停止、就绪或失败状态；不调用 desktop_start。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "后台子桌面刚断开了，上一条点击没有返回。继续帮我处理，但不能切换到我正在用的桌面。",
+      "expected_output": "检查隔离后端状态，不重放结果未知的点击，不回退本机 cua-driver，清理连接并报告需要恢复的前提。",
+      "files": []
+    }
+  ]
+}

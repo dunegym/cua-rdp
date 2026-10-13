@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+*.clixml
+*.credential.xml
+.runtime/
+coverage/
+.claude/settings.local.json
