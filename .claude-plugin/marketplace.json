@@ -1,0 +1,13 @@
+{
+  "name": "cua-rdp",
+  "description": "Single-plugin marketplace for cua-rdp: background cua-driver computer use in a native Windows RDP Child Session.",
+  "owner": { "name": "dunegym", "url": "https://github.com/dunegym" },
+  "plugins": [
+    {
+      "name": "cua-rdp",
+      "source": "./",
+      "description": "Run cua-driver in the background inside a native Windows RDP Child Session without occupying the current desktop; Hyper-V backend supported.",
+      "version": "0.3.0"
+    }
+  ]
+}

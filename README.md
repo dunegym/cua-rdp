@@ -61,6 +61,14 @@ This is a standalone system-settings action, not an implied side effect of `desk
 
 ### 3. Load the plugin
 
+Install directly from this GitHub repository as a one-plugin marketplace:
+
+```text
+/plugin install cua-rdp@dunegym/cua-rdp
+```
+
+For local development, load the working copy instead:
+
 ```powershell
 claude plugin validate "E:\Repository\cua-rdp" --strict
 claude --plugin-dir "E:\Repository\cua-rdp"
