@@ -25,7 +25,7 @@ export async function doctor() {
   try {
     await access(path.join(ROOT, 'dist', 'guest-agent.cjs'));
     checks.push({ name: 'Built desktop agent', ok: true });
-  } catch { checks.push({ name: 'Built desktop agent', ok: false, detail: 'Run npm run build in the plugin directory.' }); }
+  } catch { checks.push({ name: 'Built desktop agent', ok: false, detail: 'The bundled agent is missing; reinstall the plugin (marketplace copies ship dist/guest-agent.cjs), or run npm ci && npm run build in a source checkout.' }); }
   if (process.platform === 'win32' && config?.backend === 'child-session') {
     try {
       await access(config.driverPath);

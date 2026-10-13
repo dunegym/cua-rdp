@@ -22,7 +22,7 @@ No RDP Wrapper, system DLL patches, `tscon`, persistent scheduled tasks, service
 
 ### 1. Build and check
 
-In the plugin directory:
+Marketplace installs are ready to use: Claude Code installs the npm dependencies and the repository ships the built guest agent (`dist/guest-agent.cjs`); CI keeps that bundle identical to the sources. For a source checkout, build first:
 
 ```powershell
 npm ci

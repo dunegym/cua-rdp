@@ -1,5 +1,8 @@
 node_modules/
-dist/
+# The guest agent bundle is shipped because marketplace installs copy the repository
+# without running build steps; CI verifies it matches the sources.
+dist/*
+!dist/guest-agent.cjs
 *.log
 *.clixml
 *.credential.xml
