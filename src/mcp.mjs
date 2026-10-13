@@ -35,7 +35,7 @@ function validateArgs(name, args) {
 }
 
 export function createMcpServer(manager) {
-  const server = new Server({ name: 'cua-rdp', version: '0.3.1' }, {
+  const server = new Server({ name: 'cua-rdp', version: '0.3.2' }, {
     capabilities: { tools: {} },
     instructions: 'Use desktop_start, then desktop_tools and desktop_call for isolated guest operations. Read the guest cua-driver skill before GUI work. Never replace failed guest calls with host cua-driver tools. Stop after the task; use desktop_status to verify isolation.',
   });

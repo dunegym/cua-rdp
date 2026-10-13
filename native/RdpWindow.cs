@@ -179,7 +179,21 @@ namespace CuaRdp.Native
         public void OnConnecting() { }
         public void OnConnected() { }
         public void OnLoginComplete() { owner.LoginComplete(); }
-        public void OnDisconnected(int reason) { owner.Fail("RDP disconnected (reason " + reason + ", 0x" + reason.ToString("X", CultureInfo.InvariantCulture) + ")."); }
+        public void OnDisconnected(int reason)
+        {
+            if (reason == 2055)
+            {
+                // Observed on Windows 11 28120: the server drops prompt-free connections at NLA
+                // negotiation before any credential exchange because every connection requires
+                // an interactive password. Give the caller the actionable retry instead of a bare code.
+                if (!owner.InteractiveAuthentication)
+                    owner.Fail("RDP disconnected (reason 2055, 0x807). The server terminated this prompt-free connection before any credential exchange; this system likely requires an interactive Windows password on every connection. Retry desktop_start with authentication=interactive and complete the sign-in window.", "AUTHENTICATION_REQUIRED");
+                else
+                    owner.Fail("RDP disconnected (reason 2055, 0x807) before the interactive sign-in completed.");
+                return;
+            }
+            owner.Fail("RDP disconnected (reason " + reason + ", 0x" + reason.ToString("X", CultureInfo.InvariantCulture) + ").");
+        }
         public void OnFatalError(int code) { owner.Fail("RDP fatal error " + code + "."); }
         public void OnWarning(int code) { }
         public void OnAuthenticationWarningDisplayed() { owner.AuthenticationRequested(); }
@@ -439,6 +453,7 @@ namespace CuaRdp.Native
         private readonly int launcherPid;
         private readonly bool selfTest;
         private readonly bool interactiveAuthentication;
+        internal bool InteractiveAuthentication { get { return interactiveAuthentication; } }
         private bool authenticationComplete;
         private bool backgroundReady;
         private bool inputFocusRequired;
@@ -690,7 +705,7 @@ namespace CuaRdp.Native
 
         public void Fail(string message) { Fail(message, null); }
 
-        private void Fail(string message, string code)
+        internal void Fail(string message, string code)
         {
             if (closing || state == "failed") return;
             state = "failed";

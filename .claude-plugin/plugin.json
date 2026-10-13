@@ -1,6 +1,6 @@
 {
   "name": "cua-rdp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": { "name": "cua-rdp contributors" },
   "description": "Run cua-driver in the background inside a native Windows RDP Child Session without occupying the current desktop; Hyper-V backend supported."
 }
