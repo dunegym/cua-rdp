@@ -535,8 +535,9 @@ namespace CuaRdp.Native
             timer.Tick += Tick;
             FormClosing += delegate(object sender, FormClosingEventArgs args)
             {
-                // The user's close button parks the watch window in the tray; only the keeper's
-                // own shutdown paths (stop marker, owner exit, failure, disconnect menu) may close it.
+                // The user's close button parks the watch window in the tray (the connection is
+                // retained); minimizing keeps it in the taskbar. Only the keeper's own shutdown
+                // paths (stop marker, owner exit, failure, disconnect menu) may close it.
                 if (!closing && watchApplied && args.CloseReason == CloseReason.UserClosing)
                 {
                     args.Cancel = true;
@@ -544,10 +545,6 @@ namespace CuaRdp.Native
                     return;
                 }
                 closing = true;
-            };
-            Resize += delegate
-            {
-                if (watchApplied && WindowState == FormWindowState.Minimized) MinimizeToTray();
             };
             FormClosed += delegate
             {
@@ -771,7 +768,7 @@ namespace CuaRdp.Native
         {
             EnsureTray();
             Hide();
-            trayIcon.ShowBalloonTip(3000, "cua-rdp", "The child desktop is still connected. Double-click the tray icon to restore; use desktop_stop to end it.", ToolTipIcon.Info);
+            trayIcon.ShowBalloonTip(3000, "cua-rdp", "Closed to the tray; the child desktop is still connected. Double-click the tray icon to restore; use desktop_stop to end it.", ToolTipIcon.Info);
         }
 
         private void RestoreFromTray()
