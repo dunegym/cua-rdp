@@ -23,7 +23,7 @@ foreach ($root in $validRoots) {
     $caps = [CuaRdp.Native.BootstrapKeyboard]::EncodeCapsAscii($command)
     if ($caps.Length -lt $command.Length * 2) { throw 'Custom guest-root caps keyboard encoding failed.' }
 }
-$invalidRoots = @('', 'relative', 'C:\', 'C:\..\Windows', 'D:\RDP Guests\test_root.1', 'C:\.\Agent', 'C:\Agent\\Child', 'C:\Agent&other', 'C:\Agent"other', 'C:\Agent:stream', 'C:\Agent ', 'C:\Agent.', '\\server\share', 'C:\NUL\Agent', 'C:\路径')
+$invalidRoots = @('', 'relative', 'C:\', 'C:\..\Windows', 'D:\RDP Guests\test_root.1', 'C:\.\Agent', 'C:\Agent\\Child', 'C:\Agent&other', 'C:\Agent"other', 'C:\Agent:stream', 'C:\Agent ', 'C:\Agent.', '\\server\share', 'C:\NUL\Agent', ('C:\' + [string][char]0x8def + [string][char]0x5f84))
 foreach ($root in $invalidRoots) {
     $rejected = $false
     try { $null = [CuaRdp.Native.BootstrapKeyboard]::ValidateGuestRoot($root) }

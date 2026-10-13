@@ -30,7 +30,7 @@ const http = require('node:http');
 let calls = 0;
 let heartbeats = 0;
 let inputMatched = false;
-const body = JSON.stringify({ data: 'x'.repeat(11 * 1024 * 1024), unicode: '截图' });
+const body = JSON.stringify({ data: 'x'.repeat(11 * 1024 * 1024), unicode: String.fromCharCode(0x622a, 0x56fe) });
 const server = http.createServer((req, res) => {
   if (req.url === '/count') { res.end(JSON.stringify({ calls, heartbeats, inputMatched })); return; }
   if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + 'a'.repeat(64)) {
@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
     try {
       let value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       for (let i = 0; i < 150; i++) value = value.child;
-      inputMatched = value.text === '中文🚀';
+      inputMatched = value.text === String.fromCharCode(0x4e2d, 0x6587) + String.fromCodePoint(0x1f680);
     } catch {}
     res.setHeader('content-type', 'application/json; charset=utf-8');
     res.end(body);
@@ -84,7 +84,10 @@ try {
     $port = [int]$lineTask.Result
     if ($port -lt 1024 -or $port -gt 65535) { throw 'Local transport fixture returned an invalid port.' }
     $run = @{ runId = $runId; token = ('a' * 64); ready = @{ port = $port } }
-    $payloadJson = '{"text":"中文🚀"}'
+    # Built from code points so this script stays pure ASCII: Windows PowerShell 5.1
+    # decodes BOM-less scripts with the system ANSI codepage, which differs per machine.
+    $unicodeText = [string][char]0x4e2d + [string][char]0x6587 + [string][char]0xD83D + [string][char]0xDE80
+    $payloadJson = '{"text":"' + $unicodeText + '"}'
     for ($i = 0; $i -lt 150; $i++) { $payloadJson = '{"child":' + $payloadJson + '}' }
     $resultJson = Invoke-GuestHttp $run 'callTool' $payloadJson
     if ($resultJson -isnot [string]) { throw 'The broker must preserve the raw JSON response.' }
