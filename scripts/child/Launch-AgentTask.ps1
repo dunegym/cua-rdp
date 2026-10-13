@@ -6,11 +6,11 @@ param(
 )
 
 # Starts the staged guest agent inside the Child Session through a temporary
-# scheduled task that is deleted immediately after launch (the same mechanism the
-# BetterGI desktop-clone client uses). No keyboard input is injected, so a Chinese
-# IME in the child session cannot intercept the bootstrap, and no credential is
-# stored: the task runs as the current user with an interactive token at the least
-# privilege. The agent itself re-verifies the session identity before doing anything.
+# scheduled task that is deleted immediately after launch. No keyboard input is
+# injected, so a Chinese IME in the child session cannot intercept the bootstrap,
+# and no credential is stored: the task runs as the current user with an
+# interactive token at the least privilege. The agent itself re-verifies the
+# session identity before doing anything.
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'

@@ -242,7 +242,7 @@ namespace CuaRdp.Native
         // key, and the separate VARIANT_BOOL array carries the up state. The lParam layout sent
         // nothing to the child session on Windows 11 28120 while every call returned S_OK
         // (2026-10-13 bisect: production and the 10-12 delivering settings both failed); the raw
-        // scan layout matches the field-proven BetterGI child-session client.
+        // scan layout is field-proven on working child-session clients.
         public static int KeyData(int scanCode, bool up, bool extended)
         {
             if (scanCode < 1 || scanCode > 0xFF) throw new ArgumentOutOfRangeException("scanCode");

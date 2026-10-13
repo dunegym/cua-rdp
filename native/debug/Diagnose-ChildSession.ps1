@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$Run,
-    [ValidateSet('bettergi', 'cua-rdp')][string]$Preset = 'bettergi',
+    [ValidateSet('base', 'cua-rdp')][string]$Preset = 'base',
     [int]$Port = 3389,
     [int]$Width = 800,
     [int]$Height = 600,

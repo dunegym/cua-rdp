@@ -320,7 +320,7 @@ namespace CuaRdp.Diag
 
         private void Configure()
         {
-            string clsid = preset == "bettergi" ? "A0C63C30-F08D-4AB4-907C-34905D770C7D" : "8B918B82-7985-4C24-89DF-C33AD2BBFBCD";
+            string clsid = preset == "base" ? "A0C63C30-F08D-4AB4-907C-34905D770C7D" : "8B918B82-7985-4C24-89DF-C33AD2BBFBCD";
             control = new DiagControl(new RdpEvents(this), clsid);
             ((System.ComponentModel.ISupportInitialize)control).BeginInit();
             control.Dock = DockStyle.Fill;
@@ -602,7 +602,7 @@ namespace CuaRdp.Diag
                 }
                 if (keyStage == 1)
                 {
-                    // BetterGI's working client sets keyboard focus to the RDP input capture
+                    // Working child-session clients set keyboard focus to the RDP input capture
                     // window before every SendKeys; replicate that here and log the result.
                     Log("keytest: input-capture focus before Win+R = " + FocusInputCapture());
                     keyboard.SendKeys(CuaRdp.Native.BootstrapKeyboard.Chord(0x5B, true, 0x13));
