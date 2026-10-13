@@ -130,12 +130,13 @@ try {
         Assert-Test ([IO.File]::ReadAllText((Join-Path $runtime $name)) -ceq 'fixture-only-never-executed') ('Runtime file copied: ' + $name)
     }
     foreach ($path in @($runtime, (Join-Path $runtime 'runs')) + @((Get-ChildItem -LiteralPath $runtime -File).FullName)) {
-        $acl = Get-Acl -LiteralPath $path
+        # .NET API instead of Get-Acl: the Security module's autoload is unreliable in some CI sessions.
+        $acl = (Get-Item -LiteralPath $path -Force).GetAccessControl()
         $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
         $outsiders = @($rules | Where-Object { $_.IdentityReference.Value -cnotin @($userSid, 'S-1-5-18', 'S-1-5-32-544') })
         Assert-Test ($outsiders.Count -eq 0 -and $rules.Count -ge 3) 'Only current user, SYSTEM and Administrators can access runtime content'
     }
-    Assert-Test ((Get-Acl -LiteralPath $runtime).AreAccessRulesProtected) 'Root ACL inheritance disabled'
+    Assert-Test ((Get-Item -LiteralPath $runtime -Force).GetAccessControl()).AreAccessRulesProtected 'Root ACL inheritance disabled'
     [IO.File]::WriteAllText((Join-Path $runtime 'session-owner.json'), '{"test":true}', $utf8)
     [IO.File]::WriteAllText((Join-Path $plugin 'dist\guest-agent.cjs'), 'updated-fixture-never-executed', $utf8)
     $result = Invoke-TestScript 'Initialize-Runtime.ps1' @('-RuntimeRoot', $runtime, '-PluginRoot', $plugin, '-DriverPath', $executable, '-NodePath', $executable, '-Verbose')

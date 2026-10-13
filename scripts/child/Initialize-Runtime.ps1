@@ -39,7 +39,7 @@ try {
     if (Test-Path -LiteralPath $root) {
         if (Test-Path -LiteralPath $markerPath) { $null = Assert-ChildRuntimeOwner $root }
         else {
-            $ownerSid = (Get-Acl -LiteralPath $root).GetOwner([Security.Principal.SecurityIdentifier]).Value
+            $ownerSid = ([IO.Directory]::GetAccessControl($root)).GetOwner([Security.Principal.SecurityIdentifier]).Value
             if ($ownerSid -cne $userSid -or @(Get-ChildItem -LiteralPath $root -Force).Count -gt 0) {
                 throw '[cua-rdp] Refusing to overwrite a directory without this user''s Child Session runtime ownership marker.'
             }
