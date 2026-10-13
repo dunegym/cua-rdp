@@ -24,7 +24,9 @@ test('built guest bundle refuses a mismatched session before launching any drive
       expectedSessionId: 99999, expectedUserSid: 'S-1-impossible', driverPath: 'C:\\this-driver-must-not-be-started.exe',
       readyPath: path.join(runDir, 'ready.json'), leaseMs: 180000 }));
     await assert.rejects(exec(process.execPath, [path.join(dir, 'guest-agent.cjs'), '--config', configPath], { windowsHide: true, timeout: 20000 }), error => {
-      assert.match(error.stderr, /pinned, active, unlocked RDP session/);
+      // Interactive machines reject at the identity mismatch; a session-0 CI runner cannot even
+      // query an interactive state and must fail closed the same way — before any driver launch.
+      assert.match(error.stderr, /pinned, active, unlocked RDP session|Get-InteractiveState\.ps1/);
       assert.doesNotMatch(error.stderr, /ENOENT|fileURLToPath|import.meta/);
       return true;
     });
