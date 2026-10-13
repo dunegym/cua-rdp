@@ -40,7 +40,11 @@ try {
         if (Test-Path -LiteralPath $markerPath) { $null = Assert-ChildRuntimeOwner $root }
         else {
             $ownerSid = ([IO.Directory]::GetAccessControl($root)).GetOwner([Security.Principal.SecurityIdentifier]).Value
-            if ($ownerSid -cne $userSid -or @(Get-ChildItem -LiteralPath $root -Force).Count -gt 0) {
+            # An elevated process creates objects owned by the Administrators group (standard
+            # Windows behavior), so accept that owner while the current token is a member.
+            $adminsOwnedByThisToken = ($ownerSid -ceq 'S-1-5-32-544') -and
+                [Security.Principal.WindowsIdentity]::GetCurrent().Groups.Contains([Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+            if (($ownerSid -cne $userSid -and -not $adminsOwnedByThisToken) -or @(Get-ChildItem -LiteralPath $root -Force).Count -gt 0) {
                 throw '[cua-rdp] Refusing to overwrite a directory without this user''s Child Session runtime ownership marker.'
             }
         }
