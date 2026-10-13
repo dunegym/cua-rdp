@@ -4,8 +4,8 @@ import { object, safeError } from './util.mjs';
 
 const empty = { type: 'object', properties: {}, additionalProperties: false };
 const tools = [
-  { name: 'desktop_start', description: 'Start a native RDP Child Session (default) or configured Hyper-V desktop with cua-driver. Background startup never opens a logon window. authentication=interactive allows a visible Windows login on this connection; the user completes sign-in, the agent is launched by a one-shot session-bound scheduled task (no keyboard input, no focus handling), and the preparation window hides itself when the agent is ready. Never enables system features or adopts foreign child sessions.',
-    inputSchema: { type: 'object', properties: { authentication: { type: 'string', enum: ['background', 'interactive'], description: 'background (default): no visible authentication. interactive: explicitly allow a Windows password/certificate prompt on this connection; credentials are entered directly into Windows and never saved.' } }, additionalProperties: false } },
+  { name: 'desktop_start', description: 'Start a native RDP Child Session (default) or configured Hyper-V desktop with cua-driver. Background startup never opens a logon window. authentication=interactive allows a visible Windows login on this connection; the user completes sign-in and the agent is launched by a one-shot session-bound scheduled task (no keyboard input, no focus handling). After readiness the child-session RDP window is kept by default as a watch window (window=visible): it can be minimized, maximized, resized or parked in the tray while tasks continue; pass window=hidden (or set rdp.window in the config) for the fully hidden keeper. Never enables system features or adopts foreign child sessions.',
+    inputSchema: { type: 'object', properties: { authentication: { type: 'string', enum: ['background', 'interactive'], description: 'background (default): no visible authentication. interactive: explicitly allow a Windows password/certificate prompt on this connection; credentials are entered directly into Windows and never saved.' }, window: { type: 'string', enum: ['visible', 'hidden'], description: 'Child Session only. visible (default): keep the RDP watch window after readiness; minimize, maximize, resize and close-to-tray are supported and parking it in the tray keeps the connection until desktop_stop. hidden: the off-screen keeper with no visible window.' } }, additionalProperties: false } },
   { name: 'desktop_status', description: 'Inspect owned desktop lifecycle; when running, verify the guest identity, unlocked RDP session and keeper connection. Does not start a desktop.', inputSchema: empty, annotations: { readOnlyHint: true } },
   { name: 'desktop_stop', description: 'Stop this controller\'s driver and hidden RDP connection. Does not log off the Child Session or VM, close other applications, or disable system features.', inputSchema: empty },
   { name: 'desktop_tools', description: 'Get the guest cua-driver tool names and exact JSON input schemas (optionally filter by name). Call after desktop_start; follow nextCursor for more pages.',
@@ -35,7 +35,7 @@ function validateArgs(name, args) {
 }
 
 export function createMcpServer(manager) {
-  const server = new Server({ name: 'cua-rdp', version: '0.3.2' }, {
+  const server = new Server({ name: 'cua-rdp', version: '0.4.0' }, {
     capabilities: { tools: {} },
     instructions: 'Use desktop_start, then desktop_tools and desktop_call for isolated guest operations. Read the guest cua-driver skill before GUI work. Never replace failed guest calls with host cua-driver tools. Stop after the task; use desktop_status to verify isolation.',
   });

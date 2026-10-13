@@ -454,6 +454,9 @@ namespace CuaRdp.Native
         private readonly bool selfTest;
         private readonly bool interactiveAuthentication;
         internal bool InteractiveAuthentication { get { return interactiveAuthentication; } }
+        private readonly bool windowVisible;
+        private bool watchApplied;
+        private NotifyIcon trayIcon;
         private bool authenticationComplete;
         private bool backgroundReady;
         private bool inputFocusRequired;
@@ -479,7 +482,7 @@ namespace CuaRdp.Native
         private bool closing;
         private Process launcher;
 
-        private RdpWindow(string statusPath, string stopPath, string bootstrapPath, string guestRoot, int launcherPid, bool selfTest, ChildSessionExpectation expectedChild, bool interactiveAuthentication)
+        private RdpWindow(string statusPath, string stopPath, string bootstrapPath, string guestRoot, int launcherPid, bool selfTest, ChildSessionExpectation expectedChild, bool interactiveAuthentication, bool windowVisible)
         {
             this.statusPath = statusPath;
             this.stopPath = stopPath;
@@ -489,6 +492,9 @@ namespace CuaRdp.Native
             this.selfTest = selfTest;
             this.expectedChild = expectedChild;
             this.interactiveAuthentication = interactiveAuthentication;
+            // The watch window is a normal, user-manageable window kept after readiness (child
+            // mode only, never in self-tests). Hidden mode keeps the off-screen keeper behavior.
+            this.windowVisible = windowVisible && !selfTest && expectedChild != null;
             backgroundReady = !interactiveAuthentication || selfTest;
             if (interactiveAuthentication && expectedChild == null) throw new ArgumentException("Interactive authentication is only supported for Child Session.");
             if (expectedChild != null && this.guestRoot.Length > 160)
@@ -527,7 +533,26 @@ namespace CuaRdp.Native
             ((ISupportInitialize)control).EndInit();
             timer.Interval = 1000;
             timer.Tick += Tick;
-            FormClosing += delegate { closing = true; };
+            FormClosing += delegate(object sender, FormClosingEventArgs args)
+            {
+                // The user's close button parks the watch window in the tray; only the keeper's
+                // own shutdown paths (stop marker, owner exit, failure, disconnect menu) may close it.
+                if (!closing && watchApplied && args.CloseReason == CloseReason.UserClosing)
+                {
+                    args.Cancel = true;
+                    MinimizeToTray();
+                    return;
+                }
+                closing = true;
+            };
+            Resize += delegate
+            {
+                if (watchApplied && WindowState == FormWindowState.Minimized) MinimizeToTray();
+            };
+            FormClosed += delegate
+            {
+                if (trayIcon != null) { trayIcon.Visible = false; trayIcon.Dispose(); trayIcon = null; }
+            };
         }
 
         internal bool IsChildSession { get { return expectedChild != null; } }
@@ -681,6 +706,80 @@ namespace CuaRdp.Native
             inputAfterBackground = RdpInputObservation.Capture(Handle, control.Handle, client);
         }
 
+        private const int GWL_STYLE = -16;
+        private const int GWL_EXSTYLE = -20;
+        private const int WS_MINIMIZEBOX = 0x00020000;
+        private const int WS_MAXIMIZEBOX = 0x00010000;
+        private const int WS_THICKFRAME = 0x00040000;
+        private const int WS_EX_NOACTIVATE_STYLE = 0x08000000;
+        private const int WS_EX_TOOLWINDOW = 0x00000080;
+        private const int WS_EX_APPWINDOW = 0x00040000;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOZORDER = 0x0004;
+        private const uint SWP_FRAMECHANGED = 0x0020;
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
+        private static extern int GetWindowLong(IntPtr window, int index);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
+        private static extern int SetWindowLong(IntPtr window, int index, int value);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+        // Turns the authentication/preparation window into a retained watch window with normal
+        // chrome (minimize, maximize, resize, taskbar). Styles are changed in place because
+        // WinForms properties like FormBorderStyle/ShowInTaskbar would recreate the HWND and
+        // destroy the RDP connection.
+        private void BecomeWatchWindow()
+        {
+            if (watchApplied) return;
+            inputBeforeBackground = RdpInputObservation.Capture(Handle, control.Handle, client);
+            IntPtr formHandle = Handle;
+            object instance = control.Instance;
+            backgroundReady = true;
+            watchApplied = true;
+            try { new ComView(client.Get("AdvancedSettings9"), imported, "IMsRdpClientAdvancedSettings8").Set("SmartSizing", true); }
+            catch (Exception) { }
+            Text = "cua-rdp child session - minimize, maximize or tray are safe; desktop_stop ends the connection";
+            var area = Screen.PrimaryScreen.WorkingArea;
+            ClientSize = new Size(Math.Min(ClientSize.Width, area.Width - 64), Math.Min(ClientSize.Height, area.Height - 64));
+            Location = new Point(area.Left + 32, area.Top + 32);
+            IntPtr handle = Handle;
+            SetWindowLong(handle, GWL_STYLE, GetWindowLong(handle, GWL_STYLE) | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
+            SetWindowLong(handle, GWL_EXSTYLE, (GetWindowLong(handle, GWL_EXSTYLE) & ~(WS_EX_NOACTIVATE_STYLE | WS_EX_TOOLWINDOW)) | WS_EX_APPWINDOW);
+            SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            if (Handle != formHandle || !Object.ReferenceEquals(control.Instance, instance))
+                throw new InvalidOperationException("Showing the watch window recreated the RDP control; startup was stopped.");
+            inputAfterBackground = RdpInputObservation.Capture(Handle, control.Handle, client);
+        }
+
+        private void EnsureTray()
+        {
+            if (trayIcon != null) return;
+            trayIcon = new NotifyIcon();
+            trayIcon.Icon = SystemIcons.Application;
+            trayIcon.Text = "cua-rdp child session";
+            trayIcon.Visible = true;
+            trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+            var menu = new ContextMenuStrip();
+            menu.Items.Add("Show window", null, delegate { RestoreFromTray(); });
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Disconnect this connection", null, delegate { closing = true; BeginInvoke(new Action(Close)); });
+            trayIcon.ContextMenuStrip = menu;
+        }
+
+        private void MinimizeToTray()
+        {
+            EnsureTray();
+            Hide();
+            trayIcon.ShowBalloonTip(3000, "cua-rdp", "The child desktop is still connected. Double-click the tray icon to restore; use desktop_stop to end it.", ToolTipIcon.Info);
+        }
+
+        private void RestoreFromTray()
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+        }
+
         public void LoginComplete()
         {
             if (closing || state == "failed" || state == "connected") return;
@@ -695,7 +794,9 @@ namespace CuaRdp.Native
                 }
                 authenticationComplete = true;
                 inputAtLogon = RdpInputObservation.Capture(Handle, control.Handle, client);
-                if (VisiblePreparation) Text = "CuaRdp - preparing child agent; this window will hide before tasks";
+                if (VisiblePreparation) Text = windowVisible
+                    ? "CuaRdp - preparing child agent; a watch window will remain"
+                    : "CuaRdp - preparing child agent; this window will hide before tasks";
                 state = "connected";
                 loginAt = DateTime.UtcNow;
                 WriteStatus();
@@ -708,6 +809,7 @@ namespace CuaRdp.Native
         internal void Fail(string message, string code)
         {
             if (closing || state == "failed") return;
+            closing = true;
             state = "failed";
             error = message;
             errorCode = code;
@@ -719,7 +821,7 @@ namespace CuaRdp.Native
         {
             try
             {
-                if (launcher.HasExited || File.Exists(stopPath)) { Close(); return; }
+                if (launcher.HasExited || File.Exists(stopPath)) { closing = true; Close(); return; }
                 if ((state == "connecting" || state == "authenticating") && (DateTime.UtcNow - started).TotalSeconds > (interactiveAuthentication ? 300 : (expectedChild != null ? 30 : 120)))
                 {
                     Fail(expectedChild != null
@@ -727,7 +829,7 @@ namespace CuaRdp.Native
                         : "RDP login timed out. Check the guest address, trusted certificate, NLA credentials and guest logon policy.");
                     return;
                 }
-                if (expectedChild != null && backgroundReady)
+                if (expectedChild != null && backgroundReady && !windowVisible)
                 {
                     var screen = SystemInformation.VirtualScreen;
                     Location = new Point(screen.Right + 64, screen.Top);
@@ -738,6 +840,9 @@ namespace CuaRdp.Native
                         ChildSessionGuard.WhileConnected(ChildSessionNative.Capture(), boundChild, rdpPort, boundUserSid, boundMachineGuid);
                     BootstrapTick();
                 }
+                // Background-mode watch windows appear only after a successful connection;
+                // interactive windows switch as soon as the agent bootstrap marker arrives.
+                if (windowVisible && backgroundReady && !watchApplied && state == "connected" && !selfTest) BecomeWatchWindow();
                 if (selfTest && (DateTime.UtcNow - started).TotalSeconds > 3) { Close(); return; }
                 WriteStatus();
             }
@@ -759,7 +864,11 @@ namespace CuaRdp.Native
                 if (File.Exists(marker))
                 {
                     bootstrapPhase = "agent-started";
-                    if (!backgroundReady) EnterBackgroundMode();
+                    if (!backgroundReady)
+                    {
+                        if (windowVisible) BecomeWatchWindow();
+                        else EnterBackgroundMode();
+                    }
                     bootstrapId = null;
                     bootstrapVerifyAt = default(DateTime);
                 }
@@ -869,6 +978,7 @@ namespace CuaRdp.Native
         {
             var detail = new Dictionary<string, object>();
             detail["backgroundReady"] = backgroundReady;
+            detail["watchWindow"] = watchApplied;
             detail["bootstrapPhase"] = bootstrapPhase;
             detail["inputFocusRequired"] = inputFocusRequired;
             if (inputState != null) detail["input"] = inputState;
@@ -916,21 +1026,21 @@ namespace CuaRdp.Native
         public static void Run(string statusPath, string stopPath, string bootstrapPath, string guestRoot, int launcherPid, string address, int port,
             int width, int height, string userName, string domain, string password, bool selfTest)
         {
-            Run(statusPath, stopPath, bootstrapPath, guestRoot, launcherPid, address, port, width, height, userName, domain, password, selfTest, null);
+            Run(statusPath, stopPath, bootstrapPath, guestRoot, launcherPid, address, port, width, height, userName, domain, password, selfTest, null, false, false);
         }
 
         public static void Run(string statusPath, string stopPath, string bootstrapPath, string guestRoot, int launcherPid, string address, int port,
             int width, int height, string userName, string domain, string password, bool selfTest, ChildSessionExpectation expectedChild)
         {
-            Run(statusPath, stopPath, bootstrapPath, guestRoot, launcherPid, address, port, width, height, userName, domain, password, selfTest, expectedChild, false);
+            Run(statusPath, stopPath, bootstrapPath, guestRoot, launcherPid, address, port, width, height, userName, domain, password, selfTest, expectedChild, false, false);
         }
 
         public static void Run(string statusPath, string stopPath, string bootstrapPath, string guestRoot, int launcherPid, string address, int port,
-            int width, int height, string userName, string domain, string password, bool selfTest, ChildSessionExpectation expectedChild, bool interactiveAuthentication)
+            int width, int height, string userName, string domain, string password, bool selfTest, ChildSessionExpectation expectedChild, bool interactiveAuthentication, bool windowVisible)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            using (var window = new RdpWindow(statusPath, stopPath, bootstrapPath, guestRoot, launcherPid, selfTest, expectedChild, interactiveAuthentication))
+            using (var window = new RdpWindow(statusPath, stopPath, bootstrapPath, guestRoot, launcherPid, selfTest, expectedChild, interactiveAuthentication, windowVisible))
             {
                 try
                 {

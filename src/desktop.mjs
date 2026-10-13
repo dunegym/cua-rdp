@@ -26,10 +26,11 @@ export class DesktopManager {
     return { state: this.#state, ...(this.#error ? { error: this.#error } : {}) };
   }
 
-  start({ authentication = 'background' } = {}) {
+  start({ authentication = 'background', window } = {}) {
     return this.#exclusive(async () => {
       try {
         if (!['background', 'interactive'].includes(authentication)) throw new Error('Invalid authentication mode');
+        if (window !== undefined && !['visible', 'hidden'].includes(window)) throw new Error('Invalid window mode');
         if (!this.#implementation) {
           const config = await this.#deps.loadConfig(this.#deps.file);
           this.#backend = config.backend ?? (config.vmId ? 'hyperv' : 'child-session');
@@ -39,7 +40,8 @@ export class DesktopManager {
             : this.#backend === 'hyperv' ? new HyperVDesktopManager(options) : new ChildSessionManager(options);
         }
         if (authentication === 'interactive' && this.#backend !== 'child-session') throw new Error('Interactive authentication is only supported for Child Session');
-        await this.#implementation.start({ authentication });
+        if (window !== undefined && this.#backend !== 'child-session') throw new Error('A visible watch window is only supported for Child Session');
+        await this.#implementation.start({ authentication, window });
         return this.summary();
       } catch (error) {
         this.#state = 'failed'; this.#error = safeError(error);

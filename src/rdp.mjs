@@ -42,6 +42,7 @@ export class RdpKeeper {
       expectedParentLogonTime: config.expectedParentLogonTime,
       expectedChildSessionId: config.expectedChildSessionId ?? null,
       expectedChildLogonTime: config.expectedChildLogonTime ?? null,
+      window: config.window ?? 'hidden',
     } : { credentialPath: config.credentialPath };
     await writeJson(requestPath, {
       ...config.rdp, ...connection, guestRoot: config.guestRoot, statusPath: this.#statusPath,

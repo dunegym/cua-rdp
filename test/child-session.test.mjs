@@ -34,6 +34,7 @@ async function fixture(t, overrides = {}) {
       start: async (config, directory) => {
         log.push('rdp.start'); f.connection = config;
         assert.equal(config.mode, 'child-session'); assert.equal(config.rdp.address, 'localhost'); assert.equal(config.credentialPath, undefined);
+        assert.ok(config.window === undefined || config.window === 'visible' || config.window === 'hidden');
         await mkdir(directory, { recursive: true });
         f.native = { ...child }; f.keeperState = 'connected';
         return { state: 'connected', backgroundReady: true, parentSessionId: 1, childSessionId: 4, ...f.keeperChange };

@@ -48,17 +48,18 @@ test('child default needs no VM or credentials and keeps driver overrides', () =
   assert.equal(config.version, 2);
   assert.equal(config.driverPath, 'C:\\Users\\Example\\AppData\\Local\\Programs\\Cua\\cua-driver\\bin\\cua-driver.exe');
   assert.equal(config.credentialPath, undefined); assert.equal(config.vmId, undefined);
-  assert.deepEqual(config.rdp, { width: 1600, height: 900 });
+  assert.deepEqual(config.rdp, { width: 1600, height: 900, window: 'visible' });
   assert.equal(defaultChildConfig({ LOCALAPPDATA: 'C:\\Private', CUA_RDP_DRIVER: 'D:\\Tools\\cua-driver.exe' }).driverPath, 'D:\\Tools\\cua-driver.exe');
-  assert.equal(validateConfig(sample).backend, 'hyperv');
+  assert.equal(validateConfig({ ...sample }).backend, 'hyperv');
 });
 
 test('child config rejects unsupported backends, unsafe roots and remote executable paths', () => {
   const raw = { version: 2, backend: 'child-session', runtimeRoot: 'C:\\Private\\Child', driverPath: 'C:\\Cua\\cua-driver.exe' };
   for (const change of [{ backend: 'hyperv' }, { version: 1 }, { runtimeRoot: 'C:\\a&b' }, { runtimeRoot: 'C:\\a b' }, { runtimeRoot: 'C:\\用户\\runtime' },
-    { driverPath: '\\\\host\\cua.exe' }, { driverPath: 'cua.exe' }, { driverPath: 'C:\\Cua\\script.cmd' }, { rdp: { width: 10 } }]) {
+    { driverPath: '\\\\host\\cua.exe' }, { driverPath: 'cua.exe' }, { driverPath: 'C:\\Cua\\script.cmd' }, { rdp: { width: 10 } }, { rdp: { window: 'docked' } }]) {
     assert.throws(() => validateConfig({ ...raw, ...change }));
   }
+  assert.equal(validateConfig({ ...raw, rdp: { window: 'hidden' } }).rdp.window, 'hidden');
   assert.equal(validateConfig({ ...raw, driverPath: 'C:\\用户\\cua-driver.exe' }).driverPath, 'C:\\用户\\cua-driver.exe');
 });
 

@@ -140,9 +140,10 @@ export class ChildSessionManager {
     return Object.assign(new Error(this.#error), this.#errorCode ? { code: this.#errorCode } : {});
   }
 
-  start({ authentication = 'background' } = {}) {
+  start({ authentication = 'background', window } = {}) {
     return this.#exclusive(async () => {
       if (!['background', 'interactive'].includes(authentication)) throw new Error('Invalid authentication mode');
+      if (window !== undefined && !['visible', 'hidden'].includes(window)) throw new Error('Invalid window mode');
       if (this.#state === 'ready') {
         try { await this.#health(); return this.summary(); }
         catch (error) { throw this.#failed(error); }
@@ -168,6 +169,7 @@ export class ChildSessionManager {
           mode: 'child-session', authentication, guestRoot: this.#config.runtimeRoot,
           expectedParentSessionId: before.parentSessionId, expectedParentLogonTime: before.parentLogonTime, ...plan,
           rdp: { ...this.#config.rdp, address: 'localhost', port: before.rdpPort },
+          window: window ?? this.#config.rdp.window,
         }, this.#controlDirectory);
         const connected = await this.#deps.state();
         if (!Number.isInteger(connected.childSessionId) || connected.childSessionId <= 0 || !generation(connected.childLogonTime) ||

@@ -31,3 +31,10 @@ function Get-InteractiveAuthentication($Request) {
     if ($Request.authentication -ceq 'interactive' -and (Get-RdpRequestMode $Request) -cne 'child-session') { throw 'Interactive authentication is only supported for Child Session.' }
     return $Request.authentication -ceq 'interactive'
 }
+
+function Get-WindowVisibility($Request) {
+    if ($null -eq $Request.PSObject.Properties['window']) { return $false }
+    if ($Request.window -isnot [string] -or $Request.window -cnotin @('hidden', 'visible')) { throw 'window must be hidden or visible.' }
+    if ($Request.window -ceq 'visible' -and (Get-RdpRequestMode $Request) -cne 'child-session') { throw 'A visible watch window is only supported for Child Session.' }
+    return $Request.window -ceq 'visible'
+}

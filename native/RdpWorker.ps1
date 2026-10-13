@@ -18,6 +18,7 @@ try {
     $mode = Get-RdpRequestMode $request
     $expected = $null
     $interactiveAuthentication = Get-InteractiveAuthentication $request
+    $windowVisible = Get-WindowVisibility $request
     if ($mode -eq 'child-session') {
         $expected = Read-ChildSessionExpectation $request
         $userName = ''
@@ -43,7 +44,7 @@ try {
     $guestRoot = 'C:\ProgramData\CuaRdp'
     if ($null -ne $request.PSObject.Properties['guestRoot']) { $guestRoot = [string]$request.guestRoot }
     [CuaRdp.Native.RdpWindow]::Run($request.statusPath, $request.stopPath, $bootstrapPath, $guestRoot, $LauncherPid, $request.address,
-        [int]$request.port, [int]$request.width, [int]$request.height, $userName, $domain, $password, $SelfTest.IsPresent, $expected, $interactiveAuthentication)
+        [int]$request.port, [int]$request.width, [int]$request.height, $userName, $domain, $password, $SelfTest.IsPresent, $expected, $interactiveAuthentication, $windowVisible)
     $status = [IO.File]::ReadAllText($request.statusPath) | ConvertFrom-Json
     if ($status.state -eq 'failed') { exit 1 }
 }

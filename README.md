@@ -95,7 +95,7 @@ Only when the user explicitly allows a visible logon window, call:
 {"authentication":"interactive"}
 ```
 
-This is a `desktop_start` argument: the user types the password directly into a Windows window; the plugin never reads or stores it, and certificate warnings are judged by the user too. After authentication succeeds and identity is verified, the **same connection** briefly keeps its preparation window visible while the temporary scheduled task completes the agent bootstrap inside the child session; the window moves off-screen by itself once the startup marker arrives. The bootstrap sends no keyboard input and needs no focus handling; computer tasks are accepted only after the window is in the background and the driver is ready. The authentication stage uses the current desktop, so this is not a fully unattended background mode.
+This is a `desktop_start` argument: the user types the password directly into a Windows window; the plugin never reads or stores it, and certificate warnings are judged by the user too. After authentication succeeds and identity is verified, the **same connection** briefly keeps its preparation window while the temporary scheduled task completes the agent bootstrap inside the child session. The RDP window is then kept **by default as a watch window** (`window: "visible"`): it has normal minimize/maximize/resize chrome and a taskbar entry, minimizing or closing it parks it in the notification tray (the connection stays until `desktop_stop`), and maximizing scales the child desktop through `SmartSizing`. Pass `{"window":"hidden"}` — or set `"rdp": {"window": "hidden"}` in the configuration — for the original fully hidden off-screen keeper; background mode never shows a window before a connection is established. Computer tasks are accepted only after the agent is ready in the verified child session, regardless of window mode. The authentication stage uses the current desktop, so interactive mode is not fully unattended.
 
 Disconnecting and reconnecting may still require the password. A single logon never guarantees the next one is prompt-free; when running several tasks, keep the current connection and `desktop_stop` at the end. The plugin does not disable Credential Guard or NLA and does not change credential-delegation policy.
 
@@ -109,9 +109,11 @@ Optional Child Session configuration:
   "backend": "child-session",
   "driverPath": "C:\\Users\\You\\AppData\\Local\\Programs\\Cua\\cua-driver\\bin\\cua-driver.exe",
   "runtimeRoot": "C:\\Users\\You\\AppData\\Local\\CuaRdp\\child",
-  "rdp": { "width": 1600, "height": 900 }
+  "rdp": { "width": 1600, "height": 900, "window": "visible" }
 }
 ```
+
+`rdp.window` selects the post-start RDP window: `"visible"` (default) keeps a watch window that can be minimized, maximized, resized and parked in the tray, and `"hidden"` keeps the original off-screen keeper. `desktop_start` accepts a per-call `window` override with the same values.
 
 Keep the file in a user-private directory. For example, save it as `%LOCALAPPDATA%\CuaRdp\child-session.json` (keeping any existing Hyper-V configuration), then set this before starting Claude Code:
 

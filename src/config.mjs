@@ -28,10 +28,11 @@ function childConfig(raw) {
   text(raw.driverPath, 'driverPath');
   if (!/^[A-Za-z]:\\/u.test(raw.driverPath) || !/\.exe$/iu.test(raw.driverPath)) throw new Error('driverPath must be an absolute local Windows executable path');
   const rdp = object(raw.rdp ?? {}, 'rdp');
+  if (rdp.window !== undefined && !['visible', 'hidden'].includes(rdp.window)) throw new Error('rdp.window must be "visible" or "hidden"');
   return {
     version: 2, backend: 'child-session', driverPath: raw.driverPath,
     runtimeRoot: validateRuntimeRoot(raw.runtimeRoot ?? path.win32.join(dataRoot(), 'child')),
-    rdp: { width: integer(rdp.width ?? 1600, 'rdp.width', 800, 3840), height: integer(rdp.height ?? 900, 'rdp.height', 600, 2160) },
+    rdp: { width: integer(rdp.width ?? 1600, 'rdp.width', 800, 3840), height: integer(rdp.height ?? 900, 'rdp.height', 600, 2160), window: rdp.window ?? 'visible' },
   };
 }
 

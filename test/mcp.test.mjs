@@ -27,9 +27,11 @@ test('MCP exposes lifecycle and schema discovery, preserves image tool results',
   const listed = await client.listTools();
   assert.equal(listed.tools.length, 7);
   assert.deepEqual(listed.tools.find(tool => tool.name === 'desktop_start').inputSchema.properties.authentication.enum, ['background', 'interactive']);
-  await client.callTool({ name: 'desktop_start', arguments: { authentication: 'interactive' } });
-  assert.deepEqual(calls.find(call => call.operation === 'start').payload, { authentication: 'interactive' });
+  assert.deepEqual(listed.tools.find(tool => tool.name === 'desktop_start').inputSchema.properties.window.enum, ['visible', 'hidden']);
+  await client.callTool({ name: 'desktop_start', arguments: { authentication: 'interactive', window: 'hidden' } });
+  assert.deepEqual(calls.find(call => call.operation === 'start').payload, { authentication: 'interactive', window: 'hidden' });
   assert.equal((await client.callTool({ name: 'desktop_start', arguments: { authentication: 'auto' } })).isError, true);
+  assert.equal((await client.callTool({ name: 'desktop_start', arguments: { window: 'floaty' } })).isError, true);
   const discovery = await client.callTool({ name: 'desktop_tools', arguments: { filter: 'click' } });
   assert.equal(JSON.parse(discovery.content[0].text).tools.length, 1);
   assert.equal(JSON.parse(discovery.content[0].text).nextCursor, 'next');
