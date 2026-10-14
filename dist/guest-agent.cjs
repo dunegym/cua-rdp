@@ -17928,7 +17928,7 @@ async function main() {
     stderr: "pipe"
   });
   transport.stderr?.resume();
-  client = new Client({ name: "cua-rdp-guest", version: "0.4.2" }, { capabilities: {} });
+  client = new Client({ name: "cua-rdp-guest", version: "0.4.3" }, { capabilities: {} });
   let connected = false;
   client.onclose = () => {
     connected = false;

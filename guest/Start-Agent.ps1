@@ -42,15 +42,24 @@ try {
             throw 'A required guest executable is missing.'
         }
     }
-    $actual = & (Join-Path $PSScriptRoot 'Get-InteractiveState.ps1') | ConvertFrom-Json
-    if ($actual.machineGuid -ine $run.expectedMachineGuid -or
-        $actual.userSid -ne $run.expectedUserSid -or
-        $actual.sessionId -ne $run.expectedSessionId -or
-        $actual.sessionId -le 0 -or $actual.protocol -ne 2 -or
-        $actual.state -ne 0 -or $actual.inputDesktop -cne 'Default' -or
-        ($null -ne $run.expectedSessionLogonTime -and
-            ($run.expectedSessionLogonTime -isnot [string] -or $run.expectedSessionLogonTime -cnotmatch '^[1-9][0-9]{0,19}$' -or $actual.logonTime -cne $run.expectedSessionLogonTime))) {
-        throw 'The agent requires the expected active, unlocked RDP session.'
+    # A just-created Child Session may not satisfy the RDP identity checks for the first
+    # seconds while its input stack settles; retry briefly instead of failing the bootstrap.
+    $identityAttempts = 0
+    while ($true) {
+        $actual = $null
+        try { $actual = & (Join-Path $PSScriptRoot 'Get-InteractiveState.ps1') | ConvertFrom-Json } catch { }
+        $identityOk = $null -ne $actual -and
+            $actual.machineGuid -ieq $run.expectedMachineGuid -and
+            $actual.userSid -ceq $run.expectedUserSid -and
+            $actual.sessionId -ceq $run.expectedSessionId -and
+            $actual.sessionId -gt 0 -and $actual.protocol -ceq 2 -and
+            $actual.state -ceq 0 -and $actual.inputDesktop -ceq 'Default' -and
+            ($null -eq $run.expectedSessionLogonTime -or
+                ($run.expectedSessionLogonTime -is [string] -and $run.expectedSessionLogonTime -cmatch '^[1-9][0-9]{0,19}$' -and $actual.logonTime -ceq $run.expectedSessionLogonTime))
+        if ($identityOk) { break }
+        $identityAttempts++
+        if ($identityAttempts -ge 15) { throw 'The agent requires the expected active, unlocked RDP session.' }
+        Start-Sleep -Seconds 1
     }
     if (Test-Path -LiteralPath $stopPath) { exit 0 }
     $entry = Join-Path $PSScriptRoot 'guest-agent.cjs'
