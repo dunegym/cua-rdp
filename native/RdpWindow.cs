@@ -456,6 +456,8 @@ namespace CuaRdp.Native
         internal bool InteractiveAuthentication { get { return interactiveAuthentication; } }
         private readonly bool windowVisible;
         private bool watchApplied;
+        private bool parked;
+        private Rectangle lastOnScreenBounds;
         private NotifyIcon trayIcon;
         private bool authenticationComplete;
         private bool backgroundReady;
@@ -535,16 +537,30 @@ namespace CuaRdp.Native
             timer.Tick += Tick;
             FormClosing += delegate(object sender, FormClosingEventArgs args)
             {
-                // The user's close button parks the watch window in the tray (the connection is
-                // retained); minimizing keeps it in the taskbar. Only the keeper's own shutdown
-                // paths (stop marker, owner exit, failure, disconnect menu) may close it.
+                // The user's close button parks the watch window off-screen (a minimized or
+                // hidden window stops the RDP client from presenting, which kills in-session
+                // capture); the taskbar entry and tray icon restore it. Only the keeper's own
+                // shutdown paths (stop marker, owner exit, failure, disconnect menu) may close it.
                 if (!closing && watchApplied && args.CloseReason == CloseReason.UserClosing)
                 {
                     args.Cancel = true;
-                    MinimizeToTray();
+                    ParkOffScreen();
+                    EnsureTray();
+                    trayIcon.ShowBalloonTip(3000, "cua-rdp", "Parked; the child desktop is still connected and rendering. Restore it from the taskbar or the tray icon; use desktop_stop to end it.", ToolTipIcon.Info);
                     return;
                 }
                 closing = true;
+            };
+            Resize += delegate
+            {
+                // A real minimize would stop remote presentation and break child-session
+                // screenshots; park off-screen instead, keeping the taskbar entry.
+                if (watchApplied && WindowState == FormWindowState.Minimized) ParkOffScreen();
+            };
+            Activated += delegate
+            {
+                // Restoring from the taskbar or alt-tab while parked brings the window back.
+                if (watchApplied && parked) RestoreWatchWindow();
             };
             FormClosed += delegate
             {
@@ -736,10 +752,13 @@ namespace CuaRdp.Native
             watchApplied = true;
             try { new ComView(client.Get("AdvancedSettings9"), imported, "IMsRdpClientAdvancedSettings8").Set("SmartSizing", true); }
             catch (Exception) { }
-            Text = "cua-rdp child session - minimize, maximize or tray are safe; desktop_stop ends the connection";
+            Text = "cua-rdp child session - minimize, maximize and tray are safe; desktop_stop ends the connection";
+            if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
+            parked = false;
             var area = Screen.PrimaryScreen.WorkingArea;
             ClientSize = new Size(Math.Min(ClientSize.Width, area.Width - 64), Math.Min(ClientSize.Height, area.Height - 64));
             Location = new Point(area.Left + 32, area.Top + 32);
+            lastOnScreenBounds = new Rectangle(Location, Size);
             IntPtr handle = Handle;
             SetWindowLong(handle, GWL_STYLE, GetWindowLong(handle, GWL_STYLE) | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
             SetWindowLong(handle, GWL_EXSTYLE, (GetWindowLong(handle, GWL_EXSTYLE) & ~(WS_EX_NOACTIVATE_STYLE | WS_EX_TOOLWINDOW)) | WS_EX_APPWINDOW);
@@ -756,25 +775,45 @@ namespace CuaRdp.Native
             trayIcon.Icon = SystemIcons.Application;
             trayIcon.Text = "cua-rdp child session";
             trayIcon.Visible = true;
-            trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+            trayIcon.DoubleClick += delegate { RestoreWatchWindow(); };
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Show window", null, delegate { RestoreFromTray(); });
+            menu.Items.Add("Show window", null, delegate { RestoreWatchWindow(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Disconnect this connection", null, delegate { closing = true; BeginInvoke(new Action(Close)); });
             trayIcon.ContextMenuStrip = menu;
         }
 
-        private void MinimizeToTray()
+        // Minimized or hidden windows stop the RDP client from presenting, which idles the child
+        // session's graphics stack and breaks in-session GDI capture (BitBlt 0x80070006). Parking
+        // keeps the window visible but outside the virtual screen (the state the hidden keeper
+        // has always used), so rendering and screenshots continue in every parked state.
+        private void ParkOffScreen()
         {
-            EnsureTray();
-            Hide();
-            trayIcon.ShowBalloonTip(3000, "cua-rdp", "Closed to the tray; the child desktop is still connected. Double-click the tray icon to restore; use desktop_stop to end it.", ToolTipIcon.Info);
+            var screen = SystemInformation.VirtualScreen;
+            if (!parked)
+            {
+                var bounds = new Rectangle(Location, Size);
+                if (bounds.Right > screen.Left + 16 && bounds.X < screen.Right - 16 && bounds.Bottom > screen.Top + 16 && bounds.Y < screen.Bottom - 16)
+                    lastOnScreenBounds = bounds;
+            }
+            parked = true;
+            if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
+            Location = new Point(screen.Right + 64, screen.Top);
         }
 
-        private void RestoreFromTray()
+        private void RestoreWatchWindow()
         {
+            parked = false;
+            if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
+            var area = Screen.PrimaryScreen.WorkingArea;
+            var bounds = lastOnScreenBounds;
+            if (bounds.Width <= 0 || bounds.Height <= 0 ||
+                bounds.X < area.Left - 4096 || bounds.X > area.Right || bounds.Y < area.Top - 4096 || bounds.Y > area.Bottom)
+                bounds = new Rectangle(area.Left + 32, area.Top + 32, ClientSize.Width, ClientSize.Height);
+            Location = bounds.Location;
+            Size = bounds.Size;
             Show();
-            WindowState = FormWindowState.Normal;
+            Activate();
         }
 
         public void LoginComplete()
@@ -830,6 +869,12 @@ namespace CuaRdp.Native
                 {
                     var screen = SystemInformation.VirtualScreen;
                     Location = new Point(screen.Right + 64, screen.Top);
+                }
+                else if (expectedChild != null && backgroundReady && windowVisible && parked)
+                {
+                    // Keep a parked watch window off-screen even after topology changes.
+                    var screen = SystemInformation.VirtualScreen;
+                    if (Location.X < screen.Right) Location = new Point(screen.Right + 64, screen.Top);
                 }
                 if (state == "connected" && !selfTest)
                 {

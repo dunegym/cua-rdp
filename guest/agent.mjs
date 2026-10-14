@@ -48,7 +48,7 @@ async function main() {
     cwd: path.dirname(config.driverPath), stderr: 'pipe' });
   // Driver diagnostics may include page contents. Do not copy them into host-facing logs.
   transport.stderr?.resume();
-  client = new Client({ name: 'cua-rdp-guest', version: '0.4.3' }, { capabilities: {} });
+  client = new Client({ name: 'cua-rdp-guest', version: '0.4.4' }, { capabilities: {} });
   let connected = false;
   client.onclose = () => { connected = false; };
   await client.connect(transport, { timeout: 20_000 });
