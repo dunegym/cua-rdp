@@ -38,9 +38,8 @@ if (!process.argv.includes('--run')) {
     await sleep(2000);
     const steps = [
       ['visible-on-screen', 'state'],
-      ['minimized-taskbar', 'minimize'],
-      ['hidden-tray', 'hide'],
-      ['visible-off-screen', 'offscreen'],
+      ['minimize-parked', 'minimize'],
+      ['close-parked', 'close'],
       ['restored-on-screen', 'restore'],
     ];
     for (const [label, action] of steps) {
