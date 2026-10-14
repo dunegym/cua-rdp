@@ -65,7 +65,12 @@ try {
 } catch {
     if ($null -ne $process) { try { if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit(5000) | Out-Null } } catch { } }
     if (Test-Path -LiteralPath $runRoot -PathType Container) {
-        [IO.File]::WriteAllText((Join-Path $runRoot 'bootstrap-error.txt'), 'Guest bootstrap failed. Verify installation paths and the active, unlocked RDP session.', (New-Object Text.UTF8Encoding($false)))
+        # The specific failure reason travels to the controller through this file; keep it a
+        # short sanitized message (never config, tokens or child-desktop content).
+        $reason = [string]$_.Exception.Message
+        while ($null -ne $_.Exception.InnerException) { $reason = [string]$_.Exception.InnerException.Message; $_ = @{ Exception = $_.Exception.InnerException } }
+        if ($reason.Length -gt 400) { $reason = $reason.Substring(0, 400) }
+        [IO.File]::WriteAllText((Join-Path $runRoot 'bootstrap-error.txt'), 'Guest bootstrap failed: ' + $reason, (New-Object Text.UTF8Encoding($false)))
     }
     [Console]::Error.WriteLine('CuaRdp guest bootstrap failed; see the run directory diagnostic.')
     exit 1

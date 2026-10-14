@@ -250,6 +250,11 @@ export class ChildSessionManager {
       }
     }
     if (status?.error) rdp.error = safeError(status.error, [this.#token]);
+    try {
+      const reason = (await readFile(path.join(this.#runDirectory, 'bootstrap-error.txt'), 'utf8')).trim();
+      if (reason) rdp.bootstrapError = reason.slice(0, 500);
+    }
+    catch { }
     await this.#deps.writeJson(path.join(target, 'failure.json'), { runId: this.#runId, error: safeError(error, [this.#token]), rdp });
   }
 
@@ -273,7 +278,11 @@ export class ChildSessionManager {
         if (!Number.isInteger(ready.pid) || ready.pid <= 0 || !Number.isInteger(ready.port) || ready.port < 1024 || ready.port > 65535) throw new Error('Invalid child agent readiness descriptor');
         if (rdp.backgroundReady === true) return ready;
       }
-      try { await access(path.join(this.#runDirectory, 'bootstrap-error.txt')); throw new Error('Child agent bootstrap failed; inspect its private run diagnostic'); }
+      try {
+        await access(path.join(this.#runDirectory, 'bootstrap-error.txt'));
+        const reason = await readFile(path.join(this.#runDirectory, 'bootstrap-error.txt'), 'utf8');
+        throw new Error(`Child agent bootstrap failed: ${reason.trim().slice(0, 400)}`);
+      }
       catch (error) { if (error.code !== 'ENOENT') throw error; }
       await this.#deps.sleep(200);
     }
