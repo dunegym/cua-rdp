@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../src/location.mjs';
-for (const dir of ['src', 'guest', 'scripts', 'test']) {
+for (const [dir, extension] of [['src', '.mjs'], ['guest', '.mjs'], ['scripts', '.mjs'], ['test', '.mjs'], ['extensions', '.js'], ['extensions', '.mjs']]) {
   for (const file of readdirSync(path.join(ROOT, dir))) {
-    if (file.endsWith('.mjs')) execFileSync(process.execPath, ['--check', path.join(ROOT, dir, file)], { stdio: 'inherit' });
+    if (file.endsWith(extension)) execFileSync(process.execPath, ['--check', path.join(ROOT, dir, file)], { stdio: 'inherit' });
   }
 }
 

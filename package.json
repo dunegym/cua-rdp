@@ -3,8 +3,13 @@
   "version": "0.4.4",
   "private": true,
   "type": "module",
-  "description": "Codex and Claude Code plugin for cua-driver in a native RDP Child Session or Hyper-V desktop",
+  "description": "Codex, Claude Code and Pi plugin for cua-driver in a native RDP Child Session or Hyper-V desktop",
+  "keywords": ["pi-package", "windows", "rdp", "computer-use", "cua-driver"],
   "engines": { "node": ">=22" },
+  "pi": {
+    "extensions": ["./extensions/cua-rdp.js"],
+    "skills": ["./skills"]
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "package:plugin": "node scripts/package.mjs",

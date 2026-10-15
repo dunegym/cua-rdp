@@ -42,7 +42,7 @@ npm ci
 npm run package:plugin
 ```
 
-This builds both bundles and creates `dist/cua-rdp-0.4.4.zip`, containing one `cua-rdp/` plugin directory. The package includes the manifests, marketplace catalogs, skill, Windows runtime scripts, native sources and documentation; it excludes node_modules, Git data, local settings, tests and diagnostic prototypes. Extract it and add the extracted `cua-rdp` directory as a local marketplace with the commands above. No global install or publication occurs during packaging.
+This builds both bundles and creates `dist/cua-rdp-0.4.4.zip`, containing one `cua-rdp/` plugin directory. The package includes the manifests, marketplace catalogs, skill, Pi extension, Windows runtime scripts, native sources and documentation; it excludes node_modules, Git data, local settings, tests and diagnostic prototypes. Extract it and add the extracted `cua-rdp` directory as a local marketplace with the commands above, or as a local Pi package with `pi install ./cua-rdp`. No global install or publication occurs during packaging.
 
 ## Validation
 

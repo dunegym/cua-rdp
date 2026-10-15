@@ -1,6 +1,6 @@
 # cua-rdp
 
-A Codex and Claude Code plugin that runs `cua-driver` inside a **native Windows RDP Child Session**, in the background: no desktop switching, no locking, and no keyboard or mouse input sent to the current parent desktop. No virtual machine or second Windows account is required. Whether a Windows password is required is decided by system security policy, and reconnects may ask every time. Existing Hyper-V configurations keep working.
+A Codex, Claude Code and Pi plugin that runs `cua-driver` inside a **native Windows RDP Child Session**, in the background: no desktop switching, no locking, and no keyboard or mouse input sent to the current parent desktop. No virtual machine or second Windows account is required. Whether a Windows password is required is decided by system security policy, and reconnects may ask every time. Existing Hyper-V configurations keep working.
 
 Version **0.4.4**. Local regression tests and real-connection acceptance are two separate checks; `npm run verify` never creates a Child Session or enables system features.
 
@@ -98,7 +98,19 @@ Substitute your actual path. This loads the plugin locally without touching glob
 /cua-rdp:desktop stop
 ```
 
-The Claude Code `rdp-operator` subagent follows the same flow. The plugin does not call model APIs on its own and needs no additional model API key in either client.
+The Claude Code `rdp-operator` subagent follows the same flow. The plugin does not call model APIs on its own and needs no additional model API key in any client.
+
+#### Pi
+
+This repository is also a [Pi package](https://pi.dev/packages): `package.json` declares the `pi` manifest, `extensions/cua-rdp.js` registers the bundled MCP server, and `skills/desktop/SKILL.md` provides the skill. Pi packages cannot carry MCP server configuration, so the extension registers the same `dist/desktop-server.mjs` that Codex and Claude Code load from their manifests.
+
+```bash
+pi install ./cua-rdp                 # local checkout
+pi install git:github.com/dunegym/cua-rdp
+pi -e ./cua-rdp                      # one invocation, extension only, not saved to settings
+```
+
+A local or git install needs no build step: the two bundles under `dist/` are committed. Pi exposes the seven tools as `mcp__cua_rdp__desktop_*` (declared `direct`, with a 420-second per-call timeout so interactive authentication and long guest calls are not cut off), loads the `desktop` skill as `/skill:desktop`, and adds a read-only `/cua-rdp-doctor` command. See [Pi integration](docs/pi.md) for details, trust notes and how to run the package checks.
 
 ### 4. When the system requires a password
 
@@ -204,7 +216,7 @@ Common blockers:
 - **A single-instance application lands on the parent desktop**: use a separate instance/user-data directory or switch to Hyper-V; the plugin never operates parent windows to work around application limits.
 - **Execution policy denied**: deploy according to your organization's signed/execution policy; ExecutionPolicy Bypass is not used.
 
-Internal interfaces: [Child Session contract](docs/child-session-contract.md), [Hyper-V contract](docs/implementation-contract.md), and [native components](native/README.md). Runtime state lives in the user data directory, never in the plugin install directory.
+Internal interfaces: [Child Session contract](docs/child-session-contract.md), [Hyper-V contract](docs/implementation-contract.md), [Pi integration](docs/pi.md), and [native components](native/README.md). Runtime state lives in the user data directory, never in the plugin install directory.
 
 ## References
 

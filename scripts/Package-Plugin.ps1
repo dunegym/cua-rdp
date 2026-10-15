@@ -10,7 +10,7 @@ foreach ($bundle in @('desktop-server.mjs', 'guest-agent.cjs')) {
     if (-not (Test-Path -LiteralPath (Join-Path $root ('dist\' + $bundle)) -PathType Leaf)) { throw 'Run npm run build before packaging.' }
 }
 
-$paths = @('plugin.json', '.claude-plugin', '.agents\plugins', 'mcp.json', '.mcp.json', 'skills', 'agents', 'src', 'guest', 'native', 'docs', 'README.md', 'LICENSE', 'package.json')
+$paths = @('plugin.json', '.claude-plugin', '.agents\plugins', 'mcp.json', '.mcp.json', 'skills', 'agents', 'extensions', 'src', 'guest', 'native', 'docs', 'README.md', 'LICENSE', 'package.json')
 $files = @(
     foreach ($relative in $paths) {
         $item = Get-Item -LiteralPath (Join-Path $root $relative) -Force

@@ -6,7 +6,7 @@ argument-hint: "[start [interactive] | status | stop | computer task]"
 
 # Background child desktop
 
-This skill works in Codex and Claude Code. This plugin's `desktop_*` MCP tools belong to the `cua-rdp` `desktop` server; the host may prefix their names with the plugin namespace. Discover these tools first, then follow the user's request (or `$ARGUMENTS` in Claude Code); with no task, check status. If the plugin's tools are unavailable, report that the plugin must be installed/enabled and a new session started before continuing.
+This skill works in Codex, Claude Code and Pi. This plugin's `desktop_*` MCP tools come from the plugin's `desktop`/`cua-rdp` MCP server, so the host namespaces them (Pi calls them `mcp__cua_rdp__desktop_start`) and may add a plugin prefix. Discover these tools first, then follow the user's request (or `$ARGUMENTS` in Claude Code); with no task, check status. If the plugin's tools are unavailable, report that the plugin must be installed/enabled and a new session started before continuing.
 
 - `status`: call `desktop_status` and report the real state; this never creates or connects a desktop.
 - `start`: call `desktop_start` in default background mode; `start interactive` means the user explicitly allows a visible Windows authentication window for this connection. Only `state: ready` means RDP, child-session identity and the driver are all verified; also report the actual `backend`.
