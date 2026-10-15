@@ -12,7 +12,7 @@ function run(label, executable, args) {
 }
 
 try {
-  run('Build guest bundle', process.execPath, ['scripts/build.mjs']);
+  run('Build plugin bundles', process.execPath, ['scripts/build.mjs']);
   run('JavaScript syntax', process.execPath, ['scripts/check.mjs']);
   const tests = readdirSync(path.join(ROOT, 'test')).filter(file => file.endsWith('.test.mjs')).map(file => path.join(ROOT, 'test', file));
   run('Node regression tests', process.execPath, ['--test', ...tests]);

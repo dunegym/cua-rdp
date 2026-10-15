@@ -3,10 +3,11 @@
   "version": "0.4.4",
   "private": true,
   "type": "module",
-  "description": "Claude Code plugin for cua-driver in a native RDP Child Session or Hyper-V desktop",
+  "description": "Codex and Claude Code plugin for cua-driver in a native RDP Child Session or Hyper-V desktop",
   "engines": { "node": ">=22" },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "package:plugin": "node scripts/package.mjs",
     "test": "node --test test/*.test.mjs",
     "check": "node scripts/check.mjs",
     "verify": "node scripts/verify.mjs",

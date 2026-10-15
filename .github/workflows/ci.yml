@@ -21,5 +21,5 @@ jobs:
         run: npm install -g @anthropic-ai/claude-code
       - name: Build and verify
         run: npm run verify
-      - name: Committed guest bundle is fresh
+      - name: Committed plugin bundles are fresh
         run: git diff --exit-code -- dist

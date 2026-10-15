@@ -1,0 +1,12 @@
+{
+  "name": "cua-rdp",
+  "interface": { "displayName": "CUA RDP" },
+  "plugins": [
+    {
+      "name": "cua-rdp",
+      "source": { "source": "local", "path": "./" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
+      "category": "Productivity"
+    }
+  ]
+}

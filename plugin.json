@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "cua-rdp",
+  "version": "0.4.4",
+  "description": "Run cua-driver inside a native Windows RDP Child Session or a configured Hyper-V desktop.",
+  "author": { "name": "cua-rdp contributors" },
+  "repository": "https://github.com/dunegym/cua-rdp",
+  "license": "MIT",
+  "keywords": ["windows", "rdp", "computer-use", "cua-driver"],
+  "extensions": {
+    "com.openai": {
+      "requires_local_executor": true,
+      "interface": {
+        "displayName": "CUA RDP",
+        "shortDescription": "Operate a separate Windows desktop with cua-driver",
+        "longDescription": "Run computer tasks in a verified Windows RDP Child Session while keeping the parent desktop free. Supports a configured Hyper-V backend. Requires Windows, Node.js 22+ and a locally installed cua-driver.",
+        "developerName": "cua-rdp contributors",
+        "category": "Productivity",
+        "capabilities": ["Read", "Write", "Interactive"],
+        "defaultPrompt": [
+          "Use CUA RDP to check the desktop status.",
+          "Use CUA RDP to open Notepad in the child desktop, type a test line, verify it, then stop."
+        ]
+      }
+    }
+  }
+}

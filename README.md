@@ -1,8 +1,8 @@
 # cua-rdp
 
-A Claude Code plugin that runs `cua-driver` inside a **native Windows RDP Child Session**, in the background: no desktop switching, no locking, and no keyboard or mouse input sent to the current parent desktop. No virtual machine or second Windows account is required. Whether a Windows password is required is decided by system security policy, and reconnects may ask every time. Existing Hyper-V configurations keep working.
+A Codex and Claude Code plugin that runs `cua-driver` inside a **native Windows RDP Child Session**, in the background: no desktop switching, no locking, and no keyboard or mouse input sent to the current parent desktop. No virtual machine or second Windows account is required. Whether a Windows password is required is decided by system security policy, and reconnects may ask every time. Existing Hyper-V configurations keep working.
 
-Version **0.3.0**. Local regression tests and real-connection acceptance are two separate checks; `npm run verify` never creates a Child Session or enables system features.
+Version **0.4.4**. Local regression tests and real-connection acceptance are two separate checks; `npm run verify` never creates a Child Session or enables system features.
 
 ## How it works
 
@@ -12,7 +12,7 @@ This uses Windows' dedicated **Child Session** mechanism, not an ordinary `mstsc
 2. The system RDP ActiveX control is hosted on the parent session's **Default desktop**; background mode uses an off-screen no-activate/tool window and never calls parent-desktop focus or input APIs. `ConnectToChildSession=true` is set before connecting. Authentication on a private desktop stalled on the local Insider build; that is a local test observation, not a guarantee about all Windows builds. The remote VM backend still uses a private Win32 desktop.
 3. Waits for the real `OnLoginComplete`, then verifies parent/child SessionIds, user SID, MachineGuid and logon timestamps.
 4. The Child Session backend starts the agent and `cua-driver mcp --direct` inside the child session through a **one-shot temporary scheduled task** (bound to the child session ID, current-user interactive token, least privilege, deleted immediately after launch). **No keyboard input is injected**, so a Chinese IME in the child session cannot intercept the bootstrap, and the parent session's cua-driver daemon is never reused. The Hyper-V backend keeps its fixed remote SendKeys keyboard bootstrap.
-5. Claude Code's stdio MCP is bridged to the child-session driver over a local loopback endpoint with a random per-run token, forwarding tools, screenshots, resources and errors verbatim.
+5. The client's stdio MCP is bridged to the child-session driver over a local loopback endpoint with a random per-run token, forwarding tools, screenshots, resources and errors verbatim.
 
 No RDP Wrapper, system DLL patches, `tscon`, persistent scheduled tasks, services, autostart entries, host input injection, or Session 0 GUI. The plugin never changes the firewall, the ordinary RDP switch, certificate trust, or PowerShell execution policy.
 
@@ -22,7 +22,7 @@ No RDP Wrapper, system DLL patches, `tscon`, persistent scheduled tasks, service
 
 ### 1. Build and check
 
-Marketplace installs are ready to use: Claude Code installs the npm dependencies and the repository ships the built guest agent (`dist/guest-agent.cjs`); CI keeps that bundle identical to the sources. For a source checkout, build first:
+Marketplace installs include the MCP server (`dist/desktop-server.mjs`) and guest agent (`dist/guest-agent.cjs`), with their npm dependencies bundled. Installing into a Codex or Claude Code plugin cache needs no npm install or build hook; Windows, Node.js and cua-driver are still required. CI keeps both bundles identical to the sources. For source development, build first:
 
 ```powershell
 npm ci
@@ -40,7 +40,7 @@ When the default configuration file `%LOCALAPPDATA%\CuaRdp\config.json` does not
 - Private runtime directory: `%LOCALAPPDATA%\CuaRdp\child`
 - Resolution: 1600 × 900
 
-If the driver lives elsewhere, set this before starting Claude Code:
+If the driver lives elsewhere, set this before starting Codex or Claude Code:
 
 ```powershell
 $env:CUA_RDP_DRIVER = "D:\Tools\cua-driver\cua-driver.exe"
@@ -60,6 +60,21 @@ If `doctor` reports that Child Sessions are disabled, the user explicitly runs, 
 This is a standalone system-settings action, not an implied side effect of `desktop_start`. The script only calls the official `WTSEnableChildSessions(true)`; it installs no patches, elevates nothing, and changes no firewall rules — run it with whatever rights your system requires. Tests never do this.
 
 ### 3. Load the plugin
+
+#### Codex
+
+From this checkout, use the local marketplace (Codex CLI 0.162.1 or newer with `plugin add`):
+
+```powershell
+codex plugin marketplace add .
+codex plugin add cua-rdp@cua-rdp
+```
+
+Start a new Codex session and select the plugin's `desktop` skill, or ask: "Use CUA RDP to check the desktop status." For GUI work: "Use CUA RDP to open Notepad in the child desktop, type a test line, verify it, then stop." If Windows requires credentials, explicitly allow interactive authentication in your request; the password goes directly into Windows.
+
+The repository supplies the portable `plugin.json` manifest, `.agents/plugins/marketplace.json`, `mcp.json` and the shared `skills/desktop/SKILL.md`. Installation makes the tools available; it does not start an RDP connection. See [Codex installation and validation](docs/codex.md) for desktop-app installation, a ZIP package, and clean-install checks.
+
+#### Claude Code
 
 Install directly from this GitHub repository as a one-plugin marketplace:
 
@@ -83,7 +98,7 @@ Substitute your actual path. This loads the plugin locally without touching glob
 /cua-rdp:desktop stop
 ```
 
-The `rdp-operator` subagent follows the same flow. The plugin does not call model APIs on its own and needs no extra Anthropic API key.
+The Claude Code `rdp-operator` subagent follows the same flow. The plugin does not call model APIs on its own and needs no additional model API key in either client.
 
 ### 4. When the system requires a password
 
@@ -115,7 +130,7 @@ Optional Child Session configuration:
 
 `rdp.window` selects the post-start RDP window: `"visible"` (default) keeps a watch window that can be minimized, maximized, resized and parked in the tray, and `"hidden"` keeps the original off-screen keeper. `desktop_start` accepts a per-call `window` override with the same values.
 
-Keep the file in a user-private directory. For example, save it as `%LOCALAPPDATA%\CuaRdp\child-session.json` (keeping any existing Hyper-V configuration), then set this before starting Claude Code:
+Keep the file in a user-private directory. For example, save it as `%LOCALAPPDATA%\CuaRdp\child-session.json` (keeping any existing Hyper-V configuration), then set this before starting Codex or Claude Code:
 
 ```powershell
 $env:CUA_RDP_CONFIG = Join-Path $env:LOCALAPPDATA "CuaRdp\child-session.json"
@@ -151,7 +166,7 @@ Discover schemas before acting. The existing parent-desktop `mcp__cua-driver__*`
 - **Stopping is not logging off.** The child session and other applications are not terminated by the plugin; the same session can be reconnected later, so a blank desktop is not guaranteed. When the parent user logs off, Windows ends their Child Session.
 - If the main controller crashes, a Job Object closes the RDP worker; the agent exits via its stop marker or a lease of at most 180 seconds. Lost contact never triggers automatic replay of clicks, input, or launch tasks.
 - Clipboard, drive, printer, serial-port, smart-card, device and audio redirection are all disabled. The local bridge listens only on `127.0.0.1` with a random port, uses a random per-run token, rejects browser Origins, and never exposes a listening port.
-- "Background" does not mean a model keeps working after Claude Code exits. Sleep, parent-session switch/lock, RDP disconnect, or driver exit makes operations fail and input stop.
+- "Background" does not mean a model keeps working after the Codex or Claude Code controller exits. Sleep, parent-session switch/lock, RDP disconnect, or driver exit makes operations fail and input stop.
 
 ## Verification and troubleshooting
 
@@ -199,5 +214,6 @@ Internal interfaces: [Child Session contract](docs/child-session-contract.md), [
 - [WTSGetChildSessionId](https://learn.microsoft.com/en-us/windows/win32/api/wtsapi32/nf-wtsapi32-wtsgetchildsessionid)
 - [CreateDesktop](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createdesktopw)
 - [Claude Code plugins](https://code.claude.com/docs/en/plugins/create.md)
+- [Codex plugin packaging](https://developers.openai.com/plugins/build/plugins)
 
 The plugin implements its own no-parent-activation RDP keeper, strict session ownership checks, and a keyboard-free one-shot scheduled-task bootstrap; it never automatically logs off a child session.

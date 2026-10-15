@@ -3,6 +3,7 @@ node_modules/
 # without running build steps; CI verifies it matches the sources.
 dist/*
 !dist/guest-agent.cjs
+!dist/desktop-server.mjs
 *.log
 *.clixml
 *.credential.xml
