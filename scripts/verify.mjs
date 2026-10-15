@@ -17,7 +17,7 @@ try {
   const tests = readdirSync(path.join(ROOT, 'test')).filter(file => file.endsWith('.test.mjs')).map(file => path.join(ROOT, 'test', file));
   run('Node regression tests', process.execPath, ['--test', ...tests]);
   if (process.platform !== 'win32') throw new Error('JavaScript checks passed, but full verification requires Windows for the PowerShell and ActiveX tests');
-  for (const script of ['scripts/Test-PowerShell.ps1', 'scripts/Test-Transport.ps1', 'scripts/child/Test-ChildRuntime.ps1', 'native/Test-BootstrapKeyboard.ps1', 'native/Test-BootstrapInput.ps1', 'native/Test-Native.ps1']) {
+  for (const script of ['scripts/Test-PowerShell.ps1', 'scripts/Test-Transport.ps1', 'scripts/child/Test-ChildRuntime.ps1', 'native/Test-BootstrapKeyboard.ps1', 'native/Test-BootstrapInput.ps1', 'native/Test-Native.ps1', 'native/Test-WatchWindow.ps1']) {
     run(script, powershellPath(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', path.join(ROOT, script)]);
   }
   const command = `$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; & claude plugin validate '${ROOT.replaceAll("'", "''")}' --strict; exit $LASTEXITCODE`;

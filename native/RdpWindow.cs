@@ -457,6 +457,8 @@ namespace CuaRdp.Native
         private readonly bool windowVisible;
         private bool watchApplied;
         private bool parked;
+        private bool parkPending;
+        private bool parkBalloonShown;
         private Rectangle lastOnScreenBounds;
         private NotifyIcon trayIcon;
         private bool authenticationComplete;
@@ -539,14 +541,13 @@ namespace CuaRdp.Native
             {
                 // The user's close button parks the watch window off-screen (a minimized or
                 // hidden window stops the RDP client from presenting, which kills in-session
-                // capture); the taskbar entry and tray icon restore it. Only the keeper's own
+                // capture); the taskbar entry and tray icon restore it. ParkOffScreen installs
+                // the tray icon and shows the first-park balloon. Only the keeper's own
                 // shutdown paths (stop marker, owner exit, failure, disconnect menu) may close it.
                 if (!closing && watchApplied && args.CloseReason == CloseReason.UserClosing)
                 {
                     args.Cancel = true;
                     ParkOffScreen();
-                    EnsureTray();
-                    trayIcon.ShowBalloonTip(3000, "cua-rdp", "Parked; the child desktop is still connected and rendering. Restore it from the taskbar or the tray icon; use desktop_stop to end it.", ToolTipIcon.Info);
                     return;
                 }
                 closing = true;
@@ -554,8 +555,14 @@ namespace CuaRdp.Native
             Resize += delegate
             {
                 // A real minimize would stop remote presentation and break child-session
-                // screenshots; park off-screen instead, keeping the taskbar entry.
-                if (watchApplied && WindowState == FormWindowState.Minimized) ParkOffScreen();
+                // screenshots; park off-screen instead, keeping the taskbar entry. The park is
+                // deferred out of the WM_SIZE dispatch the minimize itself produces: mutating
+                // WindowState re-entrantly there can wedge the minimize bookkeeping.
+                if (watchApplied && WindowState == FormWindowState.Minimized && !parkPending)
+                {
+                    parkPending = true;
+                    BeginInvoke(new Action(delegate { parkPending = false; ParkOffScreen(); }));
+                }
             };
             Activated += delegate
             {
@@ -738,6 +745,55 @@ namespace CuaRdp.Native
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
+        [StructLayout(LayoutKind.Explicit)]
+        private struct PropVariant
+        {
+            [FieldOffset(0)] public ushort Vt;
+            [FieldOffset(8)] public IntPtr PointerValue;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PropertyKey
+        {
+            public Guid FormatId;
+            public int PropertyId;
+        }
+
+        [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface IPropertyStore
+        {
+            [PreserveSig] int GetCount(out uint count);
+            [PreserveSig] int GetAt(uint index, out PropertyKey key);
+            [PreserveSig] int GetValue(ref PropertyKey key, out PropVariant value);
+            [PreserveSig] int SetValue(ref PropertyKey key, ref PropVariant value);
+            [PreserveSig] int Commit();
+        }
+
+        [DllImport("propsys.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+        private static extern void SHGetPropertyStoreForWindow(IntPtr window, ref Guid interfaceId, out IPropertyStore store);
+
+        // A dedicated per-window AppUserModelID keeps the watch window out of the console
+        // host's taskbar group, so its entry is independently visible and restorable.
+        private static void SetWindowAppUserModelId(IntPtr window, string appId)
+        {
+            var storeGuid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99");
+            IPropertyStore store;
+            SHGetPropertyStoreForWindow(window, ref storeGuid, out store);
+            var key = new PropertyKey();
+            key.FormatId = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+            key.PropertyId = 5; // PKEY_AppUserModel_ID
+            var value = new PropVariant();
+            value.Vt = 31; // VT_LPWSTR
+            value.PointerValue = Marshal.StringToCoTaskMemUni(appId);
+            try
+            {
+                Marshal.ThrowExceptionForHR(store.SetValue(ref key, ref value));
+                Marshal.ThrowExceptionForHR(store.Commit());
+            }
+            finally { Marshal.FreeCoTaskMem(value.PointerValue); }
+            Marshal.ReleaseComObject(store);
+        }
+
         // Turns the authentication/preparation window into a retained watch window with normal
         // chrome (minimize, maximize, resize, taskbar). Styles are changed in place because
         // WinForms properties like FormBorderStyle/ShowInTaskbar would recreate the HWND and
@@ -763,6 +819,15 @@ namespace CuaRdp.Native
             SetWindowLong(handle, GWL_STYLE, GetWindowLong(handle, GWL_STYLE) | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
             SetWindowLong(handle, GWL_EXSTYLE, (GetWindowLong(handle, GWL_EXSTYLE) & ~(WS_EX_NOACTIVATE_STYLE | WS_EX_TOOLWINDOW)) | WS_EX_APPWINDOW);
             SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
+            SetWindowAppUserModelId(handle, "CuaRdp.ChildSession");
+            // The Windows 11 taskbar does not reliably register a button for the in-place
+            // ex-style flip above: the button tends to appear only after the next unrelated
+            // shell event, leaving a just-parked watch window with no taskbar entry at all.
+            // A same-HWND hide/show cycle registers it deterministically (measured 0/5
+            // registered without, 5/5 with, on Windows 11 28120); the continuity check below
+            // still guards against any HWND recreation.
+            Hide();
+            Show();
             if (Handle != formHandle || !Object.ReferenceEquals(control.Instance, instance))
                 throw new InvalidOperationException("Showing the watch window recreated the RDP control; startup was stopped.");
             inputAfterBackground = RdpInputObservation.Capture(Handle, control.Handle, client);
@@ -799,6 +864,14 @@ namespace CuaRdp.Native
             parked = true;
             if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
             Location = new Point(screen.Right + 64, screen.Top);
+            // Both park paths (minimize and close) must leave a restore handle behind; the
+            // balloon fires once so a first park is never mistaken for a lost window.
+            EnsureTray();
+            if (!parkBalloonShown)
+            {
+                parkBalloonShown = true;
+                trayIcon.ShowBalloonTip(3000, "cua-rdp", "Parked; the child desktop is still connected and rendering. Restore it from the taskbar or the tray icon; use desktop_stop to end it.", ToolTipIcon.Info);
+            }
         }
 
         private void RestoreWatchWindow()

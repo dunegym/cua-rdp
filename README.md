@@ -186,7 +186,7 @@ Discover schemas before acting. The existing parent-desktop `mcp__cua-driver__*`
 npm run verify
 ```
 
-Verification covers Node lifecycle/authentication/MCP tests, PowerShell installation and cleanup tests, an 11 MiB UTF-8 Hyper-V chunked-transfer test, and a connection-free self-test of the real RDP ActiveX. The native self-test creates a temporary private Win32 desktop for remote mode and an off-screen window on Default for Child Session mode, reads Child Session properties, verifies the parent input desktop is unchanged, and checks Job Object cleanup; it never calls Connect, never enables Child Sessions, and never touches existing clones.
+Verification covers Node lifecycle/authentication/MCP tests, PowerShell installation and cleanup tests, an 11 MiB UTF-8 Hyper-V chunked-transfer test, and a connection-free self-test of the real RDP ActiveX. The native self-test creates a temporary private Win32 desktop for remote mode and an off-screen window on Default for Child Session mode, reads Child Session properties, verifies the parent input desktop is unchanged, and checks Job Object cleanup; it never calls Connect, never enables Child Sessions, and never touches existing clones. A watch-window probe additionally replays the keeper's style lifecycle (tool-window keeper becoming an app-window watch window, then minimize-parked) against the real shell and asserts the taskbar entry exists throughout; it never creates an RDP control.
 
 Requests are capped at 2 MiB and responses at 64 MiB. An input timeout means the outcome may be unknown; nothing is retried automatically. `skills/desktop/evals/evals.json` contains deployment-acceptance cases and does not mean those GUI operations have passed.
 
