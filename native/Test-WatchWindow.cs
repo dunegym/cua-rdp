@@ -19,6 +19,9 @@ namespace CuaRdp.Native
     public sealed class WatchProbe : Form
     {
         [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll", EntryPoint = "IsChild")] private static extern bool IsChildWindow(IntPtr parent, IntPtr window);
+        [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr window);
         [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr window);
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(IntPtr window, int index);
         [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)] private static extern int SetWindowLong(IntPtr window, int index, int value);
@@ -101,6 +104,7 @@ namespace CuaRdp.Native
         private bool watchApplied;
         private bool parked;
         private bool parkPending;
+        private bool closingProbe;
         private NotifyIcon trayIcon;
         private Rectangle lastOnScreenBounds;
         private string report;
@@ -166,7 +170,24 @@ namespace CuaRdp.Native
             };
             Activated += delegate
             {
+                Console.Error.WriteLine("[probe] Activated parked=" + parked + " at " + (long)(DateTime.UtcNow - started).TotalMilliseconds + "ms");
                 if (watchApplied && parked) RestoreWatchWindow();
+            };
+            FormClosing += delegate(object sender, FormClosingEventArgs args)
+            {
+                Console.Error.WriteLine("[probe] FormClosing reason=" + args.CloseReason + " watchApplied=" + watchApplied + " parked=" + parked);
+                // Mirrors production: user closes AND external closes park instead of closing,
+                // deferred out of the WM_CLOSE dispatch.
+                if (!closingProbe && watchApplied && (args.CloseReason == CloseReason.UserClosing || args.CloseReason == CloseReason.TaskManagerClosing))
+                {
+                    args.Cancel = true;
+                    if (!parkPending)
+                    {
+                        parkPending = true;
+                        BeginInvoke(new Action(delegate { parkPending = false; ParkOffScreen(); }));
+                    }
+                }
+                else closingProbe = true;
             };
             timer.Interval = 800;
             timer.Tick += Step;
@@ -174,6 +195,27 @@ namespace CuaRdp.Native
         }
 
         protected override bool ShowWithoutActivation { get { return !interactiveVariant; } }
+
+        // Mirrors the production WndProc interception: user-driven minimize/close system
+        // commands park directly instead of ever reaching DefWndProc.
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == (int)WM_SYSCOMMAND_MSG && watchApplied && !closingProbe)
+            {
+                long command = message.WParam.ToInt64() & 0xFFF0;
+                if (command == 0xF020 || command == 0xF060)
+                {
+                    Console.Error.WriteLine("[probe] intercepted SYSCOMMAND " + Convert.ToString(command, 16));
+                    if (!parkPending)
+                    {
+                        parkPending = true;
+                        BeginInvoke(new Action(delegate { parkPending = false; ParkOffScreen(); }));
+                    }
+                    return;
+                }
+            }
+            TraceAndBase(ref message);
+        }
 
         protected override CreateParams CreateParams
         {
@@ -204,11 +246,17 @@ namespace CuaRdp.Native
             }
             finally
             {
-                // Mirrors the keeper tick: a parked watch window is kept off-screen.
+                // Mirrors the keeper tick: a parked watch window is kept off-screen, unless the
+                // user has it foreground on-screen (a restore the Activated handler missed).
                 if (watchApplied && parked)
                 {
                     var screen = SystemInformation.VirtualScreen;
-                    if (Location.X < screen.Right) Location = new Point(screen.Right + 64, screen.Top);
+                    if (Location.X < screen.Right)
+                    {
+                        IntPtr foreground = GetForegroundWindow();
+                        if (foreground != IntPtr.Zero && (foreground == Handle || IsChildWindow(Handle, foreground))) parked = false;
+                        else Location = new Point(screen.Right + 64, screen.Top);
+                    }
                 }
             }
         }
@@ -216,10 +264,9 @@ namespace CuaRdp.Native
         private const uint WM_SYSCOMMAND_MSG = 0x0112;
         private const uint WM_SIZE_MSG = 0x0005;
         private const uint WM_ACTIVATE_MSG = 0x0006;
-        private const uint WM_WINDOWPOSCHANGING_MSG = 0x0046;
-        private const uint WM_GETMINMAXINFO_MSG = 0x0024;
 
-        protected override void WndProc(ref Message message)
+        // Mirrors the production WndProc interception (see the override near ShowWithoutActivation).
+        private void TraceAndBase(ref Message message)
         {
             if (traceMessages)
             {
@@ -252,13 +299,50 @@ namespace CuaRdp.Native
                     Record("watch-settled");
                     return;
                 case 3:
-                    PostMessage(Handle, WM_SYSCOMMAND, SC_MINIMIZE, IntPtr.Zero);
+                    // A title-bar minimize click: WM_SYSCOMMAND/SC_MINIMIZE. The WndProc
+                    // interception must park without the window ever becoming iconic.
+                    PostMessage(Handle, WM_SYSCOMMAND_MSG, new IntPtr(0xF020), IntPtr.Zero);
                     return;
                 case 4:
-                    Record("parked");
+                    Record("min-parked");
+                    return;
+                case 5:
+                    // The taskbar button click: the shell activates the parked window. A
+                    // background probe process can be denied SetForegroundWindow by the
+                    // foreground lock (the real shell never is), so fall back to SC_RESTORE.
+                    bool activated = SetForegroundWindow(Handle);
+                    Console.Error.WriteLine("[probe] SetForegroundWindow=" + activated);
+                    if (!activated) PostMessage(Handle, WM_SYSCOMMAND_MSG, new IntPtr(0xF120), IntPtr.Zero);
+                    return;
+                case 6:
+                    // A settling tick: activation-driven restore may complete asynchronously.
+                    return;
+                case 7:
+                    Record("taskbar-restored");
+                    return;
+                case 8:
+                    // A title-bar X click: WM_SYSCOMMAND/SC_CLOSE, intercepted into a park.
+                    PostMessage(Handle, WM_SYSCOMMAND_MSG, new IntPtr(0xF060), IntPtr.Zero);
+                    return;
+                case 9:
+                    Record("close-parked");
+                    return;
+                case 10:
+                    // An external close (taskbar right-click "Close window"): bare WM_CLOSE,
+                    // which WinForms reports as TaskManagerClosing; it must park, not close.
+                    PostMessage(Handle, 0x0010, IntPtr.Zero, IntPtr.Zero);
+                    return;
+                case 11:
+                    Record("external-close-parked");
+                    return;
+                case 12:
+                    // The tray double-click restore path.
+                    RestoreWatchWindow();
+                    Record("tray-restored");
                     return;
                 default:
                     timer.Stop();
+                    closingProbe = true;
                     Close();
                     return;
             }

@@ -458,7 +458,6 @@ namespace CuaRdp.Native
         private bool watchApplied;
         private bool parked;
         private bool parkPending;
-        private bool parkBalloonShown;
         private Rectangle lastOnScreenBounds;
         private NotifyIcon trayIcon;
         private bool authenticationComplete;
@@ -542,12 +541,21 @@ namespace CuaRdp.Native
                 // The user's close button parks the watch window off-screen (a minimized or
                 // hidden window stops the RDP client from presenting, which kills in-session
                 // capture); the taskbar entry and tray icon restore it. ParkOffScreen installs
-                // the tray icon and shows the first-park balloon. Only the keeper's own
-                // shutdown paths (stop marker, owner exit, failure, disconnect menu) may close it.
-                if (!closing && watchApplied && args.CloseReason == CloseReason.UserClosing)
+                // the tray icon and shows the first-park balloon. External closes (taskbar
+                // right-click "Close window") arrive as TaskManagerClosing and must park too,
+                // not kill the connection. Only the keeper's own shutdown paths (stop marker,
+                // owner exit, failure, disconnect menu) may close it. The park is deferred out
+                // of the WM_CLOSE dispatch: parking synchronously there wedged the message
+                // loop in the watch probe (same reentrancy class as the WM_SIZE park).
+                if (!closing && watchApplied &&
+                    (args.CloseReason == CloseReason.UserClosing || args.CloseReason == CloseReason.TaskManagerClosing))
                 {
                     args.Cancel = true;
-                    ParkOffScreen();
+                    if (!parkPending)
+                    {
+                        parkPending = true;
+                        BeginInvoke(new Action(delegate { parkPending = false; ParkOffScreen(); }));
+                    }
                     return;
                 }
                 closing = true;
@@ -580,6 +588,10 @@ namespace CuaRdp.Native
         private bool AllowInteractiveLogon { get { return interactiveAuthentication && !selfTest && !authenticationComplete; } }
 
         private bool VisiblePreparation { get { return interactiveAuthentication && !selfTest && !backgroundReady; } }
+
+        private const uint WM_SYSCOMMAND_MESSAGE = 0x0112;
+        private const long SC_MINIMIZE_COMMAND = 0xF020;
+        private const long SC_CLOSE_COMMAND = 0xF060;
 
         protected override bool ShowWithoutActivation { get { return !VisiblePreparation; } }
 
@@ -738,12 +750,71 @@ namespace CuaRdp.Native
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_FRAMECHANGED = 0x0020;
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] private static extern bool IsChild(IntPtr parent, IntPtr window);
         [DllImport("user32.dll", EntryPoint = "GetWindowLongW", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr window, int index);
         [DllImport("user32.dll", EntryPoint = "SetWindowLongW", SetLastError = true)]
         private static extern int SetWindowLong(IntPtr window, int index, int value);
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+        private delegate IntPtr WindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+        private static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
+        [DllImport("user32.dll", EntryPoint = "CallWindowProcW")]
+        private static extern IntPtr CallWindowProc(IntPtr previous, IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+        // The RDP ActiveX control subclasses its host window and reacts to minimize/close
+        // system commands before WinForms ever sees them (on Windows 11 28120 an external
+        // SC_MINIMIZE tore down the connection even with a WndProc override installed).
+        // This guard is installed once, at watch conversion, so it sits at the TOP of the
+        // window-proc chain and swallows the commands into a deferred park instead.
+        private WindowProc guardProc;
+        private IntPtr previousGuardProc;
+
+        private void InstallSystemCommandGuard()
+        {
+            if (previousGuardProc != IntPtr.Zero || guardProc != null) return;
+            guardProc = GuardWindowProc;
+            previousGuardProc = SetWindowLongPtr(Handle, -4 /* GWL_WNDPROC */, Marshal.GetFunctionPointerForDelegate(guardProc));
+            if (previousGuardProc == IntPtr.Zero) throw new InvalidOperationException("The watch window command guard could not be installed.");
+        }
+
+        // The RDP control re-subclasses its host window at connect time, after the guard was
+        // installed at watch conversion, which silently put the control's own procedure back
+        // on top (measured on Windows 11 28120: posted system commands then bypassed the
+        // guard entirely). The keeper tick re-arms the guard whenever it has been buried.
+        private void EnsureGuardOnTop()
+        {
+            if (previousGuardProc == IntPtr.Zero || guardProc == null) return;
+            IntPtr current = GetWindowLongPtrValue(Handle, -4);
+            IntPtr mine = Marshal.GetFunctionPointerForDelegate(guardProc);
+            if (current == mine) return;
+            IntPtr buried = SetWindowLongPtr(Handle, -4 /* GWL_WNDPROC */, mine);
+            if (buried != IntPtr.Zero && buried != mine) previousGuardProc = buried;
+        }
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+        private static extern IntPtr GetWindowLongPtrValue(IntPtr window, int index);
+
+        private IntPtr GuardWindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam)
+        {
+            if (message == WM_SYSCOMMAND_MESSAGE)
+            {
+                long traceCommand = wParam.ToInt64() & 0xFFF0;
+                if (watchApplied && !closing && (traceCommand == SC_MINIMIZE_COMMAND || traceCommand == SC_CLOSE_COMMAND))
+                {
+                    if (!parkPending)
+                    {
+                        parkPending = true;
+                        BeginInvoke(new Action(delegate { parkPending = false; ParkOffScreen(); }));
+                    }
+                    return IntPtr.Zero;
+                }
+            }
+            return CallWindowProc(previousGuardProc, window, message, wParam, lParam);
+        }
 
         [StructLayout(LayoutKind.Explicit)]
         private struct PropVariant
@@ -816,6 +887,7 @@ namespace CuaRdp.Native
             Location = new Point(area.Left + 32, area.Top + 32);
             lastOnScreenBounds = new Rectangle(Location, Size);
             IntPtr handle = Handle;
+            InstallSystemCommandGuard();
             SetWindowLong(handle, GWL_STYLE, GetWindowLong(handle, GWL_STYLE) | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_THICKFRAME);
             SetWindowLong(handle, GWL_EXSTYLE, (GetWindowLong(handle, GWL_EXSTYLE) & ~(WS_EX_NOACTIVATE_STYLE | WS_EX_TOOLWINDOW)) | WS_EX_APPWINDOW);
             SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED);
@@ -828,6 +900,9 @@ namespace CuaRdp.Native
             // still guards against any HWND recreation.
             Hide();
             Show();
+            // The tray icon exists from conversion time so a park never performs shell
+            // interaction; it is the restore handle for both park paths.
+            EnsureTray();
             if (Handle != formHandle || !Object.ReferenceEquals(control.Instance, instance))
                 throw new InvalidOperationException("Showing the watch window recreated the RDP control; startup was stopped.");
             inputAfterBackground = RdpInputObservation.Capture(Handle, control.Handle, client);
@@ -862,16 +937,14 @@ namespace CuaRdp.Native
                     lastOnScreenBounds = bounds;
             }
             parked = true;
+            // Presentation only continues while the window is visible; heal any hidden state
+            // the RDP control may have produced before moving off-screen. This path is pure
+            // window geometry: shell UI (the tray icon) is created once at watch conversion
+            // instead, because first-time shell interaction at park time destabilized the RDP
+            // control on the real keeper (Windows 11 28120).
+            if (!Visible) Show();
             if (WindowState != FormWindowState.Normal) WindowState = FormWindowState.Normal;
             Location = new Point(screen.Right + 64, screen.Top);
-            // Both park paths (minimize and close) must leave a restore handle behind; the
-            // balloon fires once so a first park is never mistaken for a lost window.
-            EnsureTray();
-            if (!parkBalloonShown)
-            {
-                parkBalloonShown = true;
-                trayIcon.ShowBalloonTip(3000, "cua-rdp", "Parked; the child desktop is still connected and rendering. Restore it from the taskbar or the tray icon; use desktop_stop to end it.", ToolTipIcon.Info);
-            }
         }
 
         private void RestoreWatchWindow()
@@ -945,10 +1018,21 @@ namespace CuaRdp.Native
                 }
                 else if (expectedChild != null && backgroundReady && windowVisible && parked)
                 {
-                    // Keep a parked watch window off-screen even after topology changes.
+                    // Keep a parked watch window off-screen even after topology changes. If the
+                    // window is on-screen AND the user is actively on it (foreground), treat the
+                    // park as ended: a taskbar restore can land the window on-screen without the
+                    // Activated handler running (the RDP input capture steals the activation),
+                    // and dragging a just-restored window away again is exactly the
+                    // "flies back to the right" bug.
                     var screen = SystemInformation.VirtualScreen;
-                    if (Location.X < screen.Right) Location = new Point(screen.Right + 64, screen.Top);
+                    if (Location.X < screen.Right)
+                    {
+                        IntPtr foreground = GetForegroundWindow();
+                        if (foreground != IntPtr.Zero && (foreground == Handle || IsChild(Handle, foreground))) parked = false;
+                        else Location = new Point(screen.Right + 64, screen.Top);
+                    }
                 }
+                if (watchApplied) EnsureGuardOnTop();
                 if (state == "connected" && !selfTest)
                 {
                     if (expectedChild != null)

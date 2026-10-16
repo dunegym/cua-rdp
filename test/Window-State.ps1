@@ -17,7 +17,7 @@ public static class WinState {
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rect);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr window);
-    [DllImport("user32.dll")] public static extern int GetWindowTextW(IntPtr window, StringBuilder text, int count);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextW(IntPtr window, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr parameter);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
