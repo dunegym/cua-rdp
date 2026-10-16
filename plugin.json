@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "cua-rdp",
-  "version": "0.4.4",
+  "version": "0.4.6",
   "description": "Run cua-driver inside a native Windows RDP Child Session or a configured Hyper-V desktop.",
   "author": { "name": "cua-rdp contributors" },
   "repository": "https://github.com/dunegym/cua-rdp",

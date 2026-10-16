@@ -4,9 +4,13 @@ node_modules/
 dist/*
 !dist/guest-agent.cjs
 !dist/desktop-server.mjs
+# The ZCode panel bundle is committed for the same reason; the source is ui-src/panel.mjs.
+ui/*
+!ui/panel.html
 *.log
 *.clixml
 *.credential.xml
 .runtime/
 coverage/
 .claude/settings.local.json
+.zcode/

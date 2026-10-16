@@ -22,4 +22,4 @@ jobs:
       - name: Build and verify
         run: npm run verify
       - name: Committed plugin bundles are fresh
-        run: git diff --exit-code -- dist
+        run: git diff --exit-code -- dist ui

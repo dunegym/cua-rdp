@@ -1,6 +1,18 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { object, safeError } from './util.mjs';
+
+export const PANEL_URI = 'ui://cua-rdp/panel.html';
+export const PANEL_SURFACE = 'child-desktop';
+
+// ZCode's panel host injects CUA_RDP_PANEL_DIR through the plugin manifest env. An empty
+// string (a user_config default, for example) must behave exactly like an unset variable.
+export function panelDirectory(env = process.env) {
+  const value = env.CUA_RDP_PANEL_DIR?.trim();
+  return value ? value : null;
+}
 
 const empty = { type: 'object', properties: {}, additionalProperties: false };
 const tools = [
@@ -17,6 +29,9 @@ const tools = [
   { name: 'desktop_read_resource', description: 'Read a cua-driver resource, such as skill://cua-driver/SKILL.md or WINDOWS.md, from the guest. Returns embedded MCP resources without touching host applications.',
     inputSchema: { type: 'object', properties: { uri: { type: 'string', minLength: 1, maxLength: 4096 } }, required: ['uri'], additionalProperties: false }, annotations: { readOnlyHint: true } },
 ];
+// The panel drives these three through the same server instance the agent uses; the UI hint
+// lets ZCode forward results to the open surface and keeps the takeover flow visible there.
+const panelTools = new Set(['desktop_start', 'desktop_status', 'desktop_stop']);
 const jsonResult = value => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
 
 function validateArgs(name, args) {
@@ -34,12 +49,27 @@ function validateArgs(name, args) {
   }
 }
 
-export function createMcpServer(manager) {
-  const server = new Server({ name: 'cua-rdp', version: '0.4.4' }, {
-    capabilities: { tools: {} },
+export function createMcpServer(manager, { panelDir = panelDirectory() } = {}) {
+  const decorated = panelDir
+    ? tools.map(tool => panelTools.has(tool.name)
+      ? { ...tool, _meta: { ui: { resourceUri: PANEL_URI, surface: PANEL_SURFACE, visibility: ['model', 'app'] } } }
+      : tool)
+    : tools;
+  const server = new Server({ name: 'cua-rdp', version: '0.4.6' }, {
+    capabilities: panelDir ? { tools: {}, resources: {} } : { tools: {} },
     instructions: 'Use desktop_start, then desktop_tools and desktop_call for isolated guest operations. Read the guest cua-driver skill before GUI work. Never replace failed guest calls with host cua-driver tools. Stop after the task; use desktop_status to verify isolation.',
   });
-  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools }));
+  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: decorated }));
+  if (panelDir) {
+    const panelPath = path.join(panelDir, 'panel.html');
+    server.setRequestHandler(ListResourcesRequestSchema, () => ({
+      resources: [{ uri: PANEL_URI, name: 'cua-rdp child desktop panel', mimeType: 'text/html' }],
+    }));
+    server.setRequestHandler(ReadResourceRequestSchema, async request => {
+      if (request.params.uri !== PANEL_URI) throw new Error(`Unknown panel resource: ${request.params.uri}`);
+      return { contents: [{ uri: PANEL_URI, mimeType: 'text/html', text: await readFile(panelPath, 'utf8') }] };
+    });
+  }
   server.setRequestHandler(CallToolRequestSchema, async request => {
     const { name, arguments: args = {} } = request.params;
     try {

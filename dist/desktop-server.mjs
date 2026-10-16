@@ -3258,8 +3258,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path10) {
-      let input = path10;
+    function removeDotSegments(path11) {
+      let input = path11;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3668,8 +3668,8 @@ var require_schemes = __commonJS({
       }
       if (wsComponent.resourceName) {
         const queryIndex = wsComponent.resourceName.indexOf("?");
-        const path10 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
-        wsComponent.path = path10 && path10 !== "/" ? path10 : void 0;
+        const path11 = queryIndex === -1 ? wsComponent.resourceName : wsComponent.resourceName.slice(0, queryIndex);
+        wsComponent.path = path11 && path11 !== "/" ? path11 : void 0;
         wsComponent.query = queryIndex === -1 ? void 0 : wsComponent.resourceName.slice(queryIndex + 1);
         wsComponent.resourceName = void 0;
       }
@@ -7435,10 +7435,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path10) {
-  if (!path10)
+function getElementAtPath(obj, path11) {
+  if (!path11)
     return obj;
-  return path10.reduce((acc, key) => acc?.[key], obj);
+  return path11.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -7778,11 +7778,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path10, issues) {
+function prefixIssues(path11, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path10);
+    iss.path.unshift(path11);
     return iss;
   });
 }
@@ -8240,16 +8240,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path10 = []) => {
+  const processError = (error3, path11 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path10, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path11, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path10, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path11, ...issue2.path]);
       } else {
-        const fullpath = [...path10, ...issue2.path];
+        const fullpath = [...path11, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -18216,6 +18216,14 @@ var Server = class extends Protocol {
 };
 
 // src/mcp.mjs
+import { readFile as readFile4 } from "node:fs/promises";
+import path10 from "node:path";
+var PANEL_URI = "ui://cua-rdp/panel.html";
+var PANEL_SURFACE = "child-desktop";
+function panelDirectory(env = process.env) {
+  const value = env.CUA_RDP_PANEL_DIR?.trim();
+  return value ? value : null;
+}
 var empty = { type: "object", properties: {}, additionalProperties: false };
 var tools = [
   {
@@ -18249,6 +18257,7 @@ var tools = [
     annotations: { readOnlyHint: true }
   }
 ];
+var panelTools = /* @__PURE__ */ new Set(["desktop_start", "desktop_status", "desktop_stop"]);
 var jsonResult = (value) => ({ content: [{ type: "text", text: JSON.stringify(value, null, 2) }] });
 function validateArgs(name, args) {
   object2(args, "arguments");
@@ -18264,12 +18273,23 @@ function validateArgs(name, args) {
     }
   }
 }
-function createMcpServer(manager2) {
-  const server2 = new Server({ name: "cua-rdp", version: "0.4.4" }, {
-    capabilities: { tools: {} },
+function createMcpServer(manager2, { panelDir = panelDirectory() } = {}) {
+  const decorated = panelDir ? tools.map((tool) => panelTools.has(tool.name) ? { ...tool, _meta: { ui: { resourceUri: PANEL_URI, surface: PANEL_SURFACE, visibility: ["model", "app"] } } } : tool) : tools;
+  const server2 = new Server({ name: "cua-rdp", version: "0.4.6" }, {
+    capabilities: panelDir ? { tools: {}, resources: {} } : { tools: {} },
     instructions: "Use desktop_start, then desktop_tools and desktop_call for isolated guest operations. Read the guest cua-driver skill before GUI work. Never replace failed guest calls with host cua-driver tools. Stop after the task; use desktop_status to verify isolation."
   });
-  server2.setRequestHandler(ListToolsRequestSchema, () => ({ tools }));
+  server2.setRequestHandler(ListToolsRequestSchema, () => ({ tools: decorated }));
+  if (panelDir) {
+    const panelPath = path10.join(panelDir, "panel.html");
+    server2.setRequestHandler(ListResourcesRequestSchema, () => ({
+      resources: [{ uri: PANEL_URI, name: "cua-rdp child desktop panel", mimeType: "text/html" }]
+    }));
+    server2.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      if (request.params.uri !== PANEL_URI) throw new Error(`Unknown panel resource: ${request.params.uri}`);
+      return { contents: [{ uri: PANEL_URI, mimeType: "text/html", text: await readFile4(panelPath, "utf8") }] };
+    });
+  }
   server2.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args = {} } = request.params;
     try {

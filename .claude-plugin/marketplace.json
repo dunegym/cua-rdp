@@ -7,7 +7,7 @@
       "name": "cua-rdp",
       "source": "./",
       "description": "Run cua-driver in the background inside a native Windows RDP Child Session without occupying the current desktop; Hyper-V backend supported.",
-      "version": "0.4.4"
+      "version": "0.4.6"
     }
   ]
 }

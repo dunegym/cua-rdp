@@ -1,14 +1,26 @@
 {
   "name": "cua-rdp",
-  "version": "0.4.4",
+  "version": "0.4.6",
   "private": true,
   "type": "module",
-  "description": "Codex, Claude Code and Pi plugin for cua-driver in a native RDP Child Session or Hyper-V desktop",
-  "keywords": ["pi-package", "windows", "rdp", "computer-use", "cua-driver"],
-  "engines": { "node": ">=22" },
+  "description": "Codex, Claude Code, Pi and ZCode plugin for cua-driver in a native RDP Child Session or Hyper-V desktop",
+  "keywords": [
+    "pi-package",
+    "windows",
+    "rdp",
+    "computer-use",
+    "cua-driver"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "pi": {
-    "extensions": ["./extensions/cua-rdp.js"],
-    "skills": ["./skills"]
+    "extensions": [
+      "./extensions/cua-rdp.js"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -19,6 +31,11 @@
     "doctor": "node src/cli.mjs doctor",
     "start": "node src/server.mjs"
   },
-  "dependencies": { "@modelcontextprotocol/sdk": "1.32.1" },
-  "devDependencies": { "esbuild": "0.25.12" }
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "^2.0.3",
+    "esbuild": "0.25.12"
+  }
 }

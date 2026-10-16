@@ -1,0 +1,40 @@
+{
+  "name": "cua-rdp",
+  "version": "0.4.6",
+  "description": "Run cua-driver inside a native Windows RDP Child Session: a Child Desktop panel starts and connects the isolated desktop, and the session agent operates it through the desktop_* MCP tools without touching the parent desktop.",
+  "description_i18n": {
+    "en": "Run cua-driver inside a native Windows RDP Child Session: a Child Desktop panel starts and connects the isolated desktop, and the session agent operates it through the desktop_* MCP tools without touching the parent desktop.",
+    "zh-CN": "在原生 Windows RDP 子会话中运行 cua-driver：通过“子桌面”面板启动并连接隔离桌面，会话内的 agent 使用 desktop_* MCP 工具接管操作，父桌面不受任何输入干扰。"
+  },
+  "author": {
+    "name": "dunegym"
+  },
+  "license": "MIT",
+  "skills": "./skills",
+  "mcpServers": {
+    "cua-rdp": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${ZCODE_PLUGIN_ROOT}/dist/desktop-server.mjs"],
+      "cwd": "${ZCODE_PROJECT_DIR}",
+      "timeoutMs": 420000,
+      "env": {
+        "CUA_RDP_PANEL_DIR": "${ZCODE_PLUGIN_ROOT}/ui"
+      }
+    }
+  },
+  "ui": {
+    "surfaces": [
+      {
+        "id": "child-desktop",
+        "title": {
+          "zh-CN": "子桌面",
+          "en-US": "Child Desktop"
+        },
+        "server": "cua-rdp",
+        "resourceUri": "ui://cua-rdp/panel.html",
+        "availability": "session"
+      }
+    ]
+  }
+}

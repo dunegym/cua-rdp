@@ -1,6 +1,6 @@
 # cua-rdp
 
-A Codex, Claude Code and Pi plugin that runs `cua-driver` inside a **native Windows RDP Child Session**, in the background: no desktop switching, no locking, and no keyboard or mouse input sent to the current parent desktop. No virtual machine or second Windows account is required. Whether a Windows password is required is decided by system security policy, and reconnects may ask every time. Existing Hyper-V configurations keep working.
+A Codex, Claude Code, Pi and ZCode plugin that runs `cua-driver` inside a **native Windows RDP Child Session**, in the background: no desktop switching, no locking, and no keyboard or mouse input sent to the current parent desktop. No virtual machine or second Windows account is required. Whether a Windows password is required is decided by system security policy, and reconnects may ask every time. Existing Hyper-V configurations keep working.
 
 Version **0.4.4**. Local regression tests and real-connection acceptance are two separate checks; `npm run verify` never creates a Child Session or enables system features.
 
@@ -111,6 +111,25 @@ pi -e ./cua-rdp                      # one invocation, extension only, not saved
 ```
 
 A local or git install needs no build step: the two bundles under `dist/` are committed. Pi exposes the seven tools as `mcp__cua_rdp__desktop_*` (declared `direct`, with a 420-second per-call timeout so interactive authentication and long guest calls are not cut off), loads the `desktop` skill as `/skill:desktop`, and adds a read-only `/cua-rdp-doctor` command. See [Pi integration](docs/pi.md) for details, trust notes and how to run the package checks.
+
+#### ZCode
+
+This repository is also a ZCode plugin (`.zcode-plugin/plugin.json`): the same `dist/desktop-server.mjs` provides the seven tools, and a **Child Desktop** panel (`ui/panel.html`, registered through the plugin's own MCP resources) opens in the conversation sidebar. The panel starts and connects the child session with one click — background by default, or an interactive start whose Windows logon window receives the password directly — and because the panel and the session agent share one server instance, a desktop started from the panel is exactly the one the agent then operates through the `desktop_*` tools (and vice versa). Panel tool results are mirrored to the surface, so agent takeovers are visible in the panel.
+
+Install from a local checkout through a local marketplace directory, then enable the plugin and start a new session:
+
+```text
+插件市场 → 添加 → 添加插件市场 → paste the directory that contains marketplace.json
+个人 → cua-rdp (dev market) → 安装
+```
+
+The marketplace catalog is not part of the repository. For local installation, create a sibling directory with a `marketplace.json` that points at this checkout and add that directory as a marketplace:
+
+```json
+{ "name": "cua-rdp-dev", "plugins": [{ "name": "cua-rdp", "source": "./cua-rdp", "version": "0.4.4", "displayName": "cua-rdp", "displayName_i18n": { "zh-CN": "cua-rdp 子桌面" }, "description_i18n": { "zh-CN": "RDP 子会话中的隔离 Windows 桌面，会话内 agent 可接管操作" }, "category": "developer-tools" }] }
+```
+
+The committed `ui/panel.html` bundle is rebuilt by `npm run build` and CI-verified like the `dist/` bundles.
 
 ### 4. When the system requires a password
 
